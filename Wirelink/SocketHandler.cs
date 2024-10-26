@@ -12,7 +12,7 @@ namespace WireLink
         public unknownThreadException(string message)
         : base(message) { }
     }
-    class PacketHandler
+    public class PacketHandler
     {
         public static PacketHandler instance = new PacketHandler();
         SocketHepler mainSocket = new SocketHepler();
@@ -57,14 +57,15 @@ namespace WireLink
 
             if(clientToUnlockAccept.Connected) { Logger.WriteLine("local connection etstablished"); }
         }
-        public List<Func<bool>> handleLoopExitsCallBack = new List<Func<bool>>();
+        public List<Action> handleLoopExitsCallBack = new List<Action>();
         void handleLoopExits()
         {
+            shouldAcceptConnectionThreadRun = false;
             if(acceptConectionThread != null) { acceptConectionThread.Join(); }
 
-            foreach(Func<bool> func in handleLoopExitsCallBack)
+            foreach(Action action in handleLoopExitsCallBack)
             {
-                func.Invoke();
+                action.Invoke();
             }
 
             return;

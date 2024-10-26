@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  
+  <Target Name="Unity" BeforeTargets="Build">
+    <PropertyGroup>
+      <DefineConstants>$(DefineConstants);UNITY</DefineConstants>
+    </PropertyGroup>
+  </Target>
+  <Target Name="Ltest" BeforeTargets="Build">
+    <PropertyGroup>
+      <DefineConstants>$(DefineConstants);UNITY</DefineConstants>
+      <Message>hi</Message>
+    </PropertyGroup>
+  </Target>
+
+</Project>
