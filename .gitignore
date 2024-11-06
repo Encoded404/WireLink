@@ -1,6 +1,3 @@
-/Wirelink/obj
-/Wirelink/bin
-/LoggerLib/obj
-/LoggerLib/bin
-/WirelinkServer/obj
-/WirelinkServer/bin
+/deps/*.dll
+/obj
+/bin

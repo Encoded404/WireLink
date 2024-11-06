@@ -1,0 +1,13 @@
+<!-- Unity.targets -->
+<Project>
+
+    <PropertyGroup>
+        <DefineConstants>$(DefineConstants);UNITY;</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <Reference Include="UnityEngine">
+            <HintPath>\deps\UnityEngine.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+
+</Project>
