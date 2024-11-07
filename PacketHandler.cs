@@ -226,7 +226,7 @@ namespace WireLink
             Logger.WriteLine("attempting to verify connection");
 
             //test the connection with the new socket
-            if(!openClientSocket.verifyConnection()) { Logger.WriteLine("connection is invalid"); return; }
+            if(!openClientSocket.verifyConnection()) { openClientSocket.terminate(); Logger.WriteLine("connection is invalid"); return; }
 
             Logger.WriteLine("connection verified");
 

@@ -134,18 +134,31 @@ namespace WireLink
         {
             while(isRecieving)
             {
+                byte[] buffer = new byte[1];
+                if(socket != null)
+                {
+                    try
+                    {
+                        socket.Receive(buffer, buffer.Length, 0);
+                        int bufferSize = buffer[0];
+                        Logger.WriteLine("bufferSize is: "+bufferSize, true, 5);
+                        buffer = new byte[bufferSize];
+                        socket.Receive(buffer, bufferSize, 0);
+                        Logger.WriteLine("data recieved", true, 5);
+                    }
+                    catch (ObjectDisposedException exept1)
+                    {
+                        if (exept1 != null)
+                        {
+                            Logger.WriteLine("socket was shutdown wilst in a reading state", true, 1);
+                            Logger.WriteLine("exeption: "+exept1, true, 4);
+                        }
+                    }
+                }
+                else { return false; }
                 foreach (Action<byte[]> func in recieveDeligates)
                 {
-                    if(socket != null)
-                    {
-                        byte[] buffer = new byte[1];
-                        socket.Receive(buffer);
-                        int bufferSize = buffer[0];
-                        buffer = new byte[bufferSize];
-                        socket.Receive(buffer);
-                        func.Invoke(buffer);
-                    }
-                    else { return false; }
+                    func.Invoke(buffer);
                 }
             }
             return true;
@@ -157,6 +170,8 @@ namespace WireLink
         /// <returns></returns>
         public bool terminate()
         {
+            Logger.WriteLine("terminating socket", true, 4);
+
             //if the socket is defined, terminate it
             if(socket != null)
             {
@@ -164,11 +179,14 @@ namespace WireLink
                 SendRaw((byte)byteCodes.terminateConnection);
                 try
                 {
+                    Logger.WriteLine("shutting down socket", true, 4);
                     socket.Shutdown(SocketShutdown.Both);
                     socket.Disconnect(false);
+                    Logger.WriteLine("disposing socket", true, 4);
                     socket.Close();
                     socket.Dispose(); //socket.dispose is redundant, but is included for readebility and redundancy
-                } catch {}
+                    Logger.WriteLine("socket disposed", true, 4);
+                } catch (Exception e) { Logger.WriteLine("socket failed to terminate: \n" + e); }
             }
             return true;
         }
