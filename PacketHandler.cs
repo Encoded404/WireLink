@@ -50,7 +50,7 @@ namespace WireLink
         private void handleLoopExits()
         {
             shouldAcceptConnectionThreadRun = false;
-            if(acceptConectionThread != null) { acceptConectionThread.Join(); }
+            if(acceptConectionThread != null) { acceptConectionThread.Join(); Logger.WriteLine("acceptConectionThread succesfully shut down"); }
 
             foreach(Action action in handleLoopExitsCallBack)
             {
@@ -70,17 +70,17 @@ namespace WireLink
             if(incementer > 30)
             {
                 incementer = 0;
-                Logger.WriteLine("test");
+                Logger.WriteLine("test", true);
             }
         }
         private void mainLoop()
         {
             InitLoops();
-            Thread.Sleep(5);
+            Thread.Sleep(2);
 
             bool[] runningLoops = new bool[] {true};
 
-            bool isJoined = true;
+            bool isReadyForShutdown = false;
 
             Stopwatch stopwatch = new Stopwatch();
             long ticksPerSecond = Stopwatch.Frequency;
@@ -100,14 +100,16 @@ namespace WireLink
             long currentTime = stopwatch.ElapsedTicks - (long)(1f / targetUpdatesPerSecond * ticksPerSecond); // the last part is added to trick deltaTime into thinking the correct time has passed since last update
             long currentDeltaTime = currentTime;
             long currentExessTime = currentTime;
-            while(run || isJoined)
+            while(run || !isReadyForShutdown)
             {
                 currentTime = stopwatch.ElapsedTicks;
 
                 if(!run)
                 {
+                    Logger.WriteLine("shutting down main loop");
                     handleLoopExits();
-                    isJoined = false;
+                    isReadyForShutdown = true;
+                    continue;
                 }
                 
 
@@ -186,6 +188,8 @@ namespace WireLink
             int failedAccepts = 0;
             while (shouldAcceptConnectionThreadRun)
             {
+                Logger.WriteLine("shouldAcceptConnectionThreadRun is: "+shouldAcceptConnectionThreadRun, true);
+
                 //throws an eception if it failed to accept a connection too many times
                 if(failedAccepts >= 10) { throw new unknownThreadException("acceptConnectionThread ran into to many errors in a row and quit"); }
 
@@ -206,7 +210,9 @@ namespace WireLink
                 // handles the new socket
                 Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
                 Logger.WriteLine($"accepted {totalClientAcceptAttempts} clients so far!");
+
             }
+            Logger.WriteLine("shouldAcceptConnectionThreadRun is: "+shouldAcceptConnectionThreadRun+" and acceptConnectionThread is shutting down", true);
             return 0;
         }
         private void handleNewConnection(Socket socket)
@@ -220,15 +226,28 @@ namespace WireLink
             Logger.WriteLine("attempting to verify connection");
 
             //test the connection with the new socket
-            if(!openClientSocket.verifyConnection()) { return; }
+            if(!openClientSocket.verifyConnection()) { Logger.WriteLine("connection is invalid"); return; }
 
             Logger.WriteLine("connection verified");
 
             //add the socket to the list of clients
             clientSockets.Add(openClientSocket);
+
+            return;
+        }
+        private void TerminateClients()
+        {
+            Logger.WriteLine("starting termination of Clients", true);
+            foreach(SocketHepler clientSocket in clientSockets)
+            {
+                clientSocket.terminate();
+                Logger.WriteLine("client terminated", true);
+            }
         }
 
         // all public methods
+
+
         public int Start()
         {
             mainLoop();
@@ -239,10 +258,11 @@ namespace WireLink
         {
             run = false;
 
-            // it is being done in handleLoopExits but is included here for completeness
-            //shouldAcceptConnectionThreadRun = false;
+            // it is being done in handleLoopExits but is included here for completenes
+            shouldAcceptConnectionThreadRun = false;
 
-            Logger.WriteLine("closing socket");
+
+            Logger.WriteLine("closing local socket");
 
             //connects to the local open socket to unblock the thread.
             Socket clientToUnlockAccept = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -250,7 +270,15 @@ namespace WireLink
             clientToUnlockAccept.Blocking = true;
             clientToUnlockAccept.Connect(ep);
 
-            if(clientToUnlockAccept.Connected) { Logger.WriteLine("local connection etstablished"); }
+            if(clientToUnlockAccept.Connected) { Logger.WriteLine("local loopback connection etstablished", true); }
+            
+            Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logger.WriteLine("TerminateClients completed", true); });
+
+
+            terminateClients.Wait();
+
+            Logger.WriteLine("Stop Function returning", true);
+            return;
         }
         public void Restart()
         {

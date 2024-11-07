@@ -38,7 +38,7 @@ namespace WireLink
         }
         public bool SetSocket(Socket socket)
         {
-            terminate(true);
+            terminate();
             this.socket = socket;
 
             return true;
@@ -150,13 +150,25 @@ namespace WireLink
             }
             return true;
         }
-        public bool terminate(bool reuseSocket = false)
+        /// <summary>
+        /// closes a socket
+        /// </summary>
+        /// <param name="reuseSocket">whether the socket should be able to be reused</param>
+        /// <returns></returns>
+        public bool terminate()
         {
             //if the socket is defined, terminate it
             if(socket != null)
             {
+                StopRecieve();
                 SendRaw((byte)byteCodes.terminateConnection);
-                try { socket.Disconnect(reuseSocket); } catch {}
+                try
+                {
+                    socket.Shutdown(SocketShutdown.Both);
+                    socket.Disconnect(false);
+                    socket.Close();
+                    socket.Dispose(); //socket.dispose is redundant, but is included for readebility and redundancy
+                } catch {}
             }
             return true;
         }
@@ -195,7 +207,7 @@ namespace WireLink
 
             recieveDeligates.RemoveAt(deligateId);
 
-            if(retries <= 0) { isConnectionValid = false; return false; }
+            if(retries <= 0 || timeout.ElapsedMilliseconds >= timeoutTime) { isConnectionValid = false; return false; }
 
             isConnectionValid = true;
             return true;
