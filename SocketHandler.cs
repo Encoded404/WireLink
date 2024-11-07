@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-
+using System.Reflection.Metadata;
 using ConsoleLogger;
 
 namespace WireLink
@@ -17,6 +17,7 @@ namespace WireLink
         public static PacketHandler instance = new PacketHandler();
         SocketHepler mainSocket = new SocketHepler();
         List<SocketHepler> clientSockets = new List<SocketHepler>();
+        List<Thread> clientSockethreads = new List<Thread>();
         bool run = true;
 
         public int mainListiningPort = 45707;
@@ -24,41 +25,18 @@ namespace WireLink
         public int targetUpdatesPerSecond = 15;
 
         Thread? acceptConectionThread;
-        public int Start()
-        {
-            mainLoop();
 
-            return 0;
-        }
         bool shouldAcceptConnectionThreadRun = true;
-        void InitLoops()
+
+        // all private methods
+        private void InitLoops()
         {
             Logger.WriteLine("starting acceptConnectionLoop");
             acceptConectionThread = new Thread(() => { acceptConnectionThread(); });
             acceptConectionThread.Start();
         }
-        public void Stop()
-        {
-            run = false;
-            shouldAcceptConnectionThreadRun = false;
-
-            Logger.WriteLine("closing socket");
-
-            //for some unknown reason the main socket didnt accept the connection and just waited for another one.
-            Socket clientToUnlockAccept = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            IPEndPoint ep = new IPEndPoint(IPAddress.Loopback, mainListiningPort);
-            clientToUnlockAccept.Blocking = true;
-            clientToUnlockAccept.Connect(ep);
-
-            /*Socket clientToUnlockAccept = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            IPEndPoint ep2 = new IPEndPoint(IPAddress.Loopback, 45707);
-            clientToUnlockAccept.Blocking = true;
-            clientToUnlockAccept.Connect(ep2);*/
-
-            if(clientToUnlockAccept.Connected) { Logger.WriteLine("local connection etstablished"); }
-        }
         public List<Action> handleLoopExitsCallBack = new List<Action>();
-        void handleLoopExits()
+        private void handleLoopExits()
         {
             shouldAcceptConnectionThreadRun = false;
             if(acceptConectionThread != null) { acceptConectionThread.Join(); }
@@ -81,7 +59,7 @@ namespace WireLink
                 Logger.WriteLine("test");
             }
         }
-        void mainLoop()
+        private void mainLoop()
         {
             InitLoops();
             Thread.Sleep(5);
@@ -181,7 +159,11 @@ namespace WireLink
             
             Logger.WriteLine("exiting main loop");
         }
-        int acceptConnectionThread()
+        private bool isConnectionValid(Socket socket)
+        {
+            return true;
+        }
+        private int acceptConnectionThread()
         {
             bool resultBuffer;
             resultBuffer = mainSocket.Listen(mainListiningPort);
@@ -190,19 +172,97 @@ namespace WireLink
             int failedAccepts = 0;
             while (shouldAcceptConnectionThreadRun)
             {
-                if(failedAccepts >= 20) { return 18; }
+                //throws an eception if it failed to accept a connection too many times
+                if(failedAccepts >= 10) { throw new unknownThreadException("acceptConnectionThread ran into to many errors in a row and quit"); }
 
-                SocketHepler openClientSocket = new SocketHepler();
+
+                
+                //accept the next connection
                 Socket? tempSocket = mainSocket.Accept();
-                if(tempSocket == null) { failedAccepts++; continue; }
+                
+                //if the connection is invalid, increase failedAccept value
+                if( tempSocket == null || !isConnectionValid(tempSocket) ) { failedAccepts++; continue; }
+
+                // reset and increment values
                 failedAccepts = 0;
                 totalAcceptedClients += 1;
+
+                // log
                 Logger.WriteLine($"client accepted, adding to client list. accepted {totalAcceptedClients} clients so far");
-                openClientSocket.SetSocket(tempSocket);
-                clientSockets.Add(openClientSocket);
+
+                // handles the new socket
+                Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
             }
             return 0;
         }
+        private void handleNewConnection(Socket socket)
+        {
+            //initialize the socketHelper value
+            SocketHepler openClientSocket = new SocketHepler();
+
+            // sets the socket to the newly created socket
+            openClientSocket.SetSocket(socket);
+
+            //test the connection with the new socket
+            if(!verifySocketConnection(openClientSocket)) { return; }
+
+            //add the socket to the list of clients
+            clientSockets.Add(openClientSocket);
+        }
+
+        // all public methods
+        public int Start()
+        {
+            mainLoop();
+
+            return 0;
+        }
+        public void Stop()
+        {
+            run = false;
+            shouldAcceptConnectionThreadRun = false;
+
+            Logger.WriteLine("closing socket");
+
+            //connects to the local open socket to unblock the thread.
+            Socket clientToUnlockAccept = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            IPEndPoint ep = new IPEndPoint(IPAddress.Loopback, mainListiningPort);
+            clientToUnlockAccept.Blocking = true;
+            clientToUnlockAccept.Connect(ep);
+
+            if(clientToUnlockAccept.Connected) { Logger.WriteLine("local connection etstablished"); }
+        }
+        public void Restart()
+        {
+            //stop the current instance
+            Stop();
+
+            //reninit all values
+            mainSocket = new SocketHepler();
+            clientSockets = new List<SocketHepler>();
+            run = true;
+            shouldAcceptConnectionThreadRun = true;
+            handleLoopExitsCallBack = new List<Action>();
+            FixedUpdateCallBack = new List<Action>();
+            incementer = 0;
+
+            //start the current instance
+            Start();
+        }
+        public void sendMessage()
+        {
+            
+        }
+    }
+
+    public enum byteCodes : byte
+    {
+        terminateConnection = 0,
+        messageHeaderStart = 1,
+        messageHeaderEnd = 2,
+        verifyConnection = 3,
+        verifyConnectionCallback = 4,
+        recievedInvalidData = 5,
     }
 
     class SocketHepler
@@ -216,7 +276,7 @@ namespace WireLink
 
         public List<Action<byte[]>> recieveDeligates = new List<Action<byte[]>>();
         Thread? recieveThread;
-        bool shouldRecieve = false;
+        bool isRecieving = false;
 
         public bool Init(IPEndPoint endPoint)
         {
@@ -227,88 +287,101 @@ namespace WireLink
         }
         public bool SetSocket(Socket socket)
         {
-            if(socket != null)
-            {
-                try { socket.Disconnect(true); } catch { }
-            }
+            terminate(true);
             this.socket = socket;
 
             return true;
         }
         public bool Connect()
         {
-            if(socket != null && endPoint != null)
-            {
-                socket.Connect(endPoint);
-            }
-            else { Logger.WriteLine("socket or endpoint was null, returning."); return false; }
+            if (socket == null || endPoint == null) { Logger.WriteLine("socket or endpoint was null, returning."); return false; }
+
+            socket.Connect(endPoint);
 
             return true;
         }
         public bool Listen(int port)
         {
+            
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
             socket.Bind(ep);
 
-            socket.Listen();
             Logger.WriteLine("listining port created and opened");
-
-            if(socket == null) { Logger.WriteLine("socket is null, returning false (listenCall)"); return false; }
+            socket.Listen();
 
             return true;
         }
         public Socket? Accept()
         {
+            //return if the current socket is not defined
             if(socket == null)
             {
                 Logger.WriteLine("socket was null, returning. (acceptCall)");
                 return null;
             }
-            /*int waitBuffer = int.MaxValue;
-            int waitBuffer2 = int.MaxValue;
-            while(waitBuffer2 > 0)
-            {
-                while(waitBuffer > 0) { waitBuffer--; }
-                waitBuffer = int.MaxValue;
-            }*/
             
-            Logger.WriteLine($"ready to accept clients.");
+            Logger.WriteLine($"ready to accept client.");
             Socket returnValue = socket.Accept();
             Logger.WriteLine("connection accepted");
             return returnValue;
         }
         public bool Send(byte[] data)
         {
-            if(socket != null)
-            {
-                socket.Send(new byte[] { (byte)data.Length });
-                socket.Send(data);
-            }
-            else { Logger.WriteLine("socket was null, returning."); return false; }
+            //return if the current socket is not defined
+            if(socket == null) { Logger.WriteLine("socket was null, returning."); return false; }
+            //return if the current socket hasnt been validated
+            if(!isConnectionValid) { Logger.WriteLine("connection isnt valid, returning."); return false; }
 
             return true;
         }
-        public bool StartRecieve()
+        private void SendRaw(byte[] data)
         {
-            if(socket != null)
-            {
-                shouldRecieve = true;
-                recieveThread = new Thread(() => recieveFunc());
-                recieveThread.Start();
-            }
-            else { Logger.WriteLine("socket was null, returning."); return false; }
+            //return if the current socket is not defined
+            if(socket == null) { Logger.WriteLine("socket was null, returning."); return; }
+
+            socket.Send(new byte[] { (byte)data.Length });
+            socket.Send(data);
+        }
+        private void SendRaw(byte data)
+        {
+            //return if the current socket is not defined
+            if(socket == null) { Logger.WriteLine("socket was null, returning."); return; }
+
+            socket.Send(new byte[] { data });
+        }
+        public bool Recieve()
+        {
+            return StartRecieve();
+        }
+        public bool Recieve(Action<byte[]> functionCallback)
+        {
+            if(!StartRecieve()) { return false; } 
+
+            recieveDeligates.Add(functionCallback);
+
+            return true;
+        }
+        private bool StartRecieve()
+        {
+            //return if the current socket is not defined
+            if(socket == null) { Logger.WriteLine("socket was null, returning."); return false; }
+
+            isRecieving = true;
+            recieveThread = new Thread(() => recieveFunc());
+            recieveThread.Start();
+
             return true;
         }
         public bool StopRecieve()
         {
-            shouldRecieve = false;
+            isRecieving = false;
 
             return true;
         }
         bool recieveFunc()
         {
-            while(shouldRecieve)
+            while(isRecieving)
             {
                 foreach (Action<byte[]> func in recieveDeligates)
                 {
@@ -324,6 +397,63 @@ namespace WireLink
                     else { return false; }
                 }
             }
+            return true;
+        }
+        public bool terminate(bool reuseSocket = false)
+        {
+            //if the socket is defined, terminate it
+            if(socket != null)
+            {
+                SendRaw((byte)byteCodes.terminateConnection);
+                try { socket.Disconnect(reuseSocket); } catch {}
+            }
+            return true;
+        }
+        bool isConnectionValid = false;
+        Random randomIdGenerator = new Random();
+        public bool verifyConnection()
+        {
+            byte[] randomId = new byte[4];
+            randomIdGenerator.NextBytes(randomId);
+            if(!isRecieving)
+            {
+                if(StartRecieve() == false) { return false; }
+            }
+
+            int retries = 3;
+            bool returned = false;
+
+            //add a function the check if the connection is valid
+            recieveDeligates.Add((byte[] bytes) => 
+            {
+                //if no more retries are left return with a failed connection
+                if(retries <= 0) { SendRaw((byte)byteCodes.recievedInvalidData); retries = -1; returned = true; return; }
+
+                //if the recieved data is the wrong size retry
+                if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return; }
+
+                //if the first byte is the correct return value proceed
+                if(bytes[0] != (byte)byteCodes.verifyConnectionCallback) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return; }
+
+                // if the id matches the original id, accept the connection
+                for(int i = 1; i < bytes.Length; i++)
+                {
+                    if(bytes[i] != randomId[i-1]) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return; }
+                }
+                returned = true;
+                return;
+            });
+
+            SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]);
+
+            while(!returned)
+            {
+                Thread.Sleep(1);
+            }
+
+            if(retries <= 0) { isConnectionValid = false; return false; }
+
+            isConnectionValid = true;
             return true;
         }
     }
