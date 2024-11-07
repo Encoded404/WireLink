@@ -14,14 +14,23 @@ namespace WireLink
     }
     public class PacketHandler
     {
+        /// <summary>
+        /// the main packetHandler intance
+        /// </summary>
         public static PacketHandler instance = new PacketHandler();
         SocketHepler mainSocket = new SocketHepler();
         List<SocketHepler> clientSockets = new List<SocketHepler>();
         List<Thread> clientSockethreads = new List<Thread>();
         bool run = true;
 
+        /// <summary>
+        /// the main port for the server, ie the port the server listens for clients on
+        /// </summary>
         public int mainListiningPort = 45707;
 
+        /// <summary>
+        /// the target updates per second of the main loop, which is responsible for packets, dataCompression, connections, etc
+        /// </summary>
         public int targetUpdatesPerSecond = 15;
 
         Thread? acceptConectionThread;
@@ -35,6 +44,9 @@ namespace WireLink
             acceptConectionThread = new Thread(() => { acceptConnectionThread(); });
             acceptConectionThread.Start();
         }
+        /// <summary>
+        /// a deligate being called on server shutdown
+        /// </summary>
         public List<Action> handleLoopExitsCallBack = new List<Action>();
         private void handleLoopExits()
         {
@@ -48,6 +60,9 @@ namespace WireLink
 
             return;
         }
+        /// <summary>
+        /// a deligate being called targetUpdatesPerSecond times every second
+        /// </summary>
         public List<Action> FixedUpdateCallBack = new List<Action>();
         int incementer = 0;
         private void FixedUpdate(float deltaTime)
@@ -204,7 +219,7 @@ namespace WireLink
             openClientSocket.SetSocket(socket);
 
             //test the connection with the new socket
-            if(!verifySocketConnection(openClientSocket)) { return; }
+            if(!openClientSocket.verifyConnection()) { return; }
 
             //add the socket to the list of clients
             clientSockets.Add(openClientSocket);
