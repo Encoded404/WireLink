@@ -182,7 +182,7 @@ namespace WireLink
             bool resultBuffer;
             resultBuffer = mainSocket.Listen(mainListiningPort);
             if(resultBuffer == false) { Logger.WriteLine("listen function ran into an error an has returned"); return 14; }
-            int totalAcceptedClients = 0;
+            int totalClientAcceptAttempts = 0;
             int failedAccepts = 0;
             while (shouldAcceptConnectionThreadRun)
             {
@@ -199,10 +199,10 @@ namespace WireLink
 
                 // reset and increment values
                 failedAccepts = 0;
-                totalAcceptedClients += 1;
+                totalClientAcceptAttempts += 1;
 
                 // log
-                Logger.WriteLine($"client accepted, adding to client list. accepted {totalAcceptedClients} clients so far");
+                Logger.WriteLine($"client accepted, adding to client list. accepted {totalClientAcceptAttempts} clients so far");
 
                 // handles the new socket
                 Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
