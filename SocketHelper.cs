@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using ConsoleLogger;
 using System.Net;
+using System.Diagnostics;
 
 
 namespace WireLink
@@ -161,7 +162,12 @@ namespace WireLink
         }
         bool isConnectionValid = false;
         Random randomIdGenerator = new Random();
-        public bool verifyConnection()
+        /// <summary>
+        /// verifies the connection of the sockethelper
+        /// </summary>
+        /// <param name="timeoutTime">the timeout time in milseconds, set to 0 to disable timeout</param>
+        /// <returns></returns>
+        public bool verifyConnection(uint timeoutTime = 1000)
         {
             byte[] randomId = new byte[4];
             randomIdGenerator.NextBytes(randomId);
@@ -174,37 +180,46 @@ namespace WireLink
             bool returned = false;
 
             //add a function the check if the connection is valid
-            recieveDeligates.Add((byte[] bytes) => 
-            {
-                //if no more retries are left return with a failed connection
-                if(retries <= 0) { SendRaw((byte)byteCodes.recievedInvalidData); retries = -1; returned = true; return; }
-
-                //if the recieved data is the wrong size retry
-                if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return; }
-
-                //if the first byte is the correct return value proceed
-                if(bytes[0] != (byte)byteCodes.verifyConnectionCallback) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return; }
-
-                // if the id matches the original id, accept the connection
-                for(int i = 1; i < bytes.Length; i++)
-                {
-                    if(bytes[i] != randomId[i-1]) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return; }
-                }
-                returned = true;
-                return;
-            });
+            recieveDeligates.Add((byte[] bytes) => { verifySingleConnection(bytes, randomId, ref retries, out returned); });
+            int deligateId = recieveDeligates.Count -1;
 
             SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]);
 
-            while(!returned)
+            Stopwatch timeout = Stopwatch.StartNew();
+            //checks whether the connection has returned, or the timeout has ran out
+            while( !returned && (timeoutTime == 0 || timeout.ElapsedMilliseconds < timeoutTime) )
             {
                 Thread.Sleep(1);
             }
+            timeout.Stop();
+
+            recieveDeligates.RemoveAt(deligateId);
 
             if(retries <= 0) { isConnectionValid = false; return false; }
 
             isConnectionValid = true;
             return true;
+        }
+        private void verifySingleConnection(byte[] bytes, byte[] randomId, ref int triesLeft, out bool returned)
+        {
+            returned = false;
+
+            //if no more retries are left return with a failed connection
+            if(triesLeft <= 0) { SendRaw((byte)byteCodes.recievedInvalidData); triesLeft = -1; returned = true; return; }
+
+            //if the recieved data is the wrong size retry
+            if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); triesLeft--; return; }
+
+            //if the first byte is the correct return value proceed
+            if(bytes[0] != (byte)byteCodes.verifyConnectionCallback) { SendRaw((byte)byteCodes.recievedInvalidData); triesLeft--; return; }
+
+            // if the id matches the original id, accept the connection
+            for(int i = 1; i < bytes.Length; i++)
+            {
+                if(bytes[i] != randomId[i-1]) { SendRaw((byte)byteCodes.recievedInvalidData); triesLeft--; return; }
+            }
+            returned = true;
+            return;
         }
     }
 }

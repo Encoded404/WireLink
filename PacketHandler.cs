@@ -202,10 +202,10 @@ namespace WireLink
                 totalClientAcceptAttempts += 1;
 
                 // log
-                Logger.WriteLine($"client accepted, adding to client list. accepted {totalClientAcceptAttempts} clients so far");
 
                 // handles the new socket
                 Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
+                Logger.WriteLine($"accepted {totalClientAcceptAttempts} clients so far!");
             }
             return 0;
         }
@@ -217,8 +217,12 @@ namespace WireLink
             // sets the socket to the newly created socket
             openClientSocket.SetSocket(socket);
 
+            Logger.WriteLine("attempting to verify connection");
+
             //test the connection with the new socket
             if(!openClientSocket.verifyConnection()) { return; }
+
+            Logger.WriteLine("connection verified");
 
             //add the socket to the list of clients
             clientSockets.Add(openClientSocket);
@@ -234,7 +238,9 @@ namespace WireLink
         public void Stop()
         {
             run = false;
-            shouldAcceptConnectionThreadRun = false;
+
+            // it is being done in handleLoopExits but is included here for completeness
+            //shouldAcceptConnectionThreadRun = false;
 
             Logger.WriteLine("closing socket");
 
