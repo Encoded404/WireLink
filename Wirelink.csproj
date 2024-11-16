@@ -7,11 +7,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!--<ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />-->
-    <Reference Include="LoggerLib">
-      <HintPath>..\LoggerLib\bin\Debug\net8.0\LoggerLib.dll</HintPath>
-    </Reference>
+  <ItemGroup><!--<ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />-->
+  
+    <ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />
   </ItemGroup>
 
   <Import Project="Unity.targets" Condition="'$(UnityBuild)' == 'true'" />

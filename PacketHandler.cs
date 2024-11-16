@@ -188,8 +188,6 @@ namespace WireLink
             int failedAccepts = 0;
             while (shouldAcceptConnectionThreadRun)
             {
-                Logger.WriteLine("shouldAcceptConnectionThreadRun is: "+shouldAcceptConnectionThreadRun, true);
-
                 //throws an eception if it failed to accept a connection too many times
                 if(failedAccepts >= 10) { throw new unknownThreadException("acceptConnectionThread ran into to many errors in a row and quit"); }
 
@@ -212,7 +210,6 @@ namespace WireLink
                 Logger.WriteLine($"accepted {totalClientAcceptAttempts} clients so far!");
 
             }
-            Logger.WriteLine("shouldAcceptConnectionThreadRun is: "+shouldAcceptConnectionThreadRun+" and acceptConnectionThread is shutting down", true);
             return 0;
         }
         private void handleNewConnection(Socket socket)
@@ -250,8 +247,12 @@ namespace WireLink
 
         public int Start()
         {
-            mainLoop();
+            Logger.WriteLine("attaching exeptionhandler", true);
+            AppDomain currentDomain = AppDomain.CurrentDomain;
+            currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
 
+            mainLoop();
+            
             return 0;
         }
         public void Stop()
@@ -300,6 +301,39 @@ namespace WireLink
         public void sendMessage()
         {
             
+        }
+
+        void CleanUp(object sender, UnhandledExceptionEventArgs args)
+        {
+            //Console.Clear();
+
+            Exception e = (Exception) args.ExceptionObject;
+            Logger.WriteLine("CleanUp caught : " + e.Message);
+            Logger.WriteLine("Runtime terminating: {0}", args.IsTerminating);
+
+            try
+            {
+                Logger.WriteLine("attemting cleanup");
+                Logger.ResetColor();
+                Console.TreatControlCAsInput = false;
+
+                Logger.WriteLine("stopping server, caused by cleanup", true, 4);
+
+                Stop();
+                Logger.WriteLine("full cleanup succesfull");
+            }
+            catch
+            {
+                Logger.WriteLine("full cleanup failed, attempting partial cleanup");
+                try
+                {
+                    TerminateClients();
+                }
+                catch
+                {
+                    Logger.WriteLine("cleanup failed completly");
+                }
+            }
         }
     }
 }

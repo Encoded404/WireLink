@@ -150,8 +150,8 @@ namespace WireLink
                     {
                         if (exept1 != null)
                         {
-                            Logger.WriteLine("socket was shutdown wilst in a reading state", true, 1);
-                            Logger.WriteLine("exeption: "+exept1, true, 4);
+                            Logger.WriteLine("socket was shutdown whilst in a reading state", true, 1);
+                            Logger.WriteLine("exeption (test): "+exept1.ToString().Replace("\n", "\n\t"), true, 5);
                         }
                     }
                 }
@@ -166,7 +166,6 @@ namespace WireLink
         /// <summary>
         /// closes a socket
         /// </summary>
-        /// <param name="reuseSocket">whether the socket should be able to be reused</param>
         /// <returns></returns>
         public bool terminate()
         {
@@ -179,13 +178,13 @@ namespace WireLink
                 SendRaw((byte)byteCodes.terminateConnection);
                 try
                 {
-                    Logger.WriteLine("shutting down socket", true, 4);
+                    Logger.WriteLine("shutting down socket", true, 5);
                     socket.Shutdown(SocketShutdown.Both);
                     socket.Disconnect(false);
-                    Logger.WriteLine("disposing socket", true, 4);
+                    Logger.WriteLine("disposing socket", true, 5);
                     socket.Close();
                     socket.Dispose(); //socket.dispose is redundant, but is included for readebility and redundancy
-                    Logger.WriteLine("socket disposed", true, 4);
+                    Logger.WriteLine("socket disposed", true, 5);
                 } catch (Exception e) { Logger.WriteLine("socket failed to terminate: \n" + e); }
             }
             return true;
