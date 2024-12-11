@@ -7,8 +7,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup><!--<ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />-->
-  
+  <ItemGroup>
     <ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />
   </ItemGroup>
 

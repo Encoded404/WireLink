@@ -5,6 +5,11 @@ using ConsoleLogger;
 
 namespace WireLink
 {
+    public enum ServerType
+    {
+        Client,
+        Server,
+    }
     class unknownThreadException : Exception
     {
         public unknownThreadException() { }
@@ -18,44 +23,57 @@ namespace WireLink
         /// </summary>
         public static PacketHandler instance = new PacketHandler();
         SocketHepler mainSocket = new SocketHepler();
-        List<SocketHepler> clientSockets = new List<SocketHepler>();
-        List<Thread> clientSockethreads = new List<Thread>();
+        Dictionary<Guid, SocketHepler>? clientSockets;
+        List<Thread>? clientSockethreads;
         bool run = true;
 
         /// <summary>
         /// the main port for the server, ie the port the server listens for clients on
         /// </summary>
-        public int mainListiningPort = 45707;
+        public int mainServerListiningPort = 45707;
+        public int mainClientListiningPort = 45706;
 
         /// <summary>
         /// the target updates per second of the main loop, which is responsible for packets, dataCompression, connections, etc
         /// </summary>
-        public int targetUpdatesPerSecond = 15;
+        public int targetUpdatesPerSecond = 2;
 
         Thread? acceptConectionThread;
 
-        bool shouldAcceptConnectionThreadRun = true;
-
         // all private methods
-        private void InitLoops()
+        private void InitServerLoops()
         {
             Logger.WriteLine("starting acceptConnectionLoop");
             acceptConectionThread = new Thread(() => { acceptConnectionThread(); });
             acceptConectionThread.Start();
         }
-        /// <summary>
+        private void InitClientLoops()
+        {
+
+        }
+
+        private void ConnectToServer()
+        {
+            mainSocket.Connect();
+            mainSocket.verifyServerConnection();
+        }
+
+        /* /// <summary>
         /// a deligate being called on server shutdown
         /// </summary>
-        public List<Action> handleLoopExitsCallBack = new List<Action>();
-        private void handleLoopExits()
+        public List<Action> handleLoopExitsCallBack = new List<Action>(); */
+        private void HandleLoopExits()
         {
-            shouldAcceptConnectionThreadRun = false;
-            if(acceptConectionThread != null) { acceptConectionThread.Join(); Logger.WriteLine("acceptConectionThread succesfully shut down"); }
+            if(_serverType == ServerType.Server)
+            {
+                shouldAcceptConnectionThreadRun = false;
+                if(acceptConectionThread != null) { acceptConectionThread.Join(); Logger.WriteLine("acceptConectionThread succesfully shut down"); }
+            }
 
-            foreach(Action action in handleLoopExitsCallBack)
+            /* foreach(Action action in handleLoopExitsCallBack)
             {
                 action.Invoke();
-            }
+            } */
 
             return;
         }
@@ -67,65 +85,69 @@ namespace WireLink
         private void FixedUpdate(float deltaTime)
         {
             incementer++;
-            if(incementer > 30)
+            if(incementer > 0)
             {
                 incementer = 0;
-                Logger.WriteLine("test", true);
+                //Logger.WriteLine("test", true);
             }
         }
+        readonly long ticksPerSecond = Stopwatch.Frequency;
+        readonly long ticksPerMilisecond = Stopwatch.Frequency / 1000;
         private void mainLoop()
         {
-            InitLoops();
-            Thread.Sleep(2);
-
-            bool[] runningLoops = new bool[] {true};
-
             bool isReadyForShutdown = false;
 
             Stopwatch stopwatch = new Stopwatch();
-            long ticksPerSecond = Stopwatch.Frequency;
             float milisecondsPerUpdate = 1000f / targetUpdatesPerSecond;
 
-            float exessTime = 0f;
+            //float exessTime = 0f;
 
             Queue<float> avrDeltaTimeQueue = new();
             float maxQueueSaveDuration = 8f;
             float maxQueueSaveCount = (float)targetUpdatesPerSecond * maxQueueSaveDuration;
+
             float avrDeltaTime = 0f;
             float maxDeltaTime = 0f;
             float minDeltaTime = 1f;
 
-            Logger.WriteLine($"running main loop at a Frequency of {targetUpdatesPerSecond} updates per second, timer has a Frequency of {ticksPerSecond} ticks per seconds");
+            Logger.WriteLine($"running main loop at a Frequency of {targetUpdatesPerSecond} updates per second, timer has a reselution of {ticksPerSecond} ticks per seconds");
             stopwatch.Start();
-            long currentTime = stopwatch.ElapsedTicks - (long)(1f / targetUpdatesPerSecond * ticksPerSecond); // the last part is added to trick deltaTime into thinking the correct time has passed since last update
-            long currentDeltaTime = currentTime;
-            long currentExessTime = currentTime;
+            long currentTimeStartThisIteration = stopwatch.ElapsedTicks - (long)(1f / targetUpdatesPerSecond * ticksPerSecond); // the last part is added to trick deltaTime into thinking the correct time has passed since last update
+            long currentDeltaTime = currentTimeStartThisIteration;
+            long timeAfterLastIteration = stopwatch.ElapsedTicks;
+
             while(run || !isReadyForShutdown)
             {
-                currentTime = stopwatch.ElapsedTicks;
+                currentTimeStartThisIteration = stopwatch.ElapsedTicks;
+
+                milisecondsPerUpdate = 1000f / targetUpdatesPerSecond;
 
                 if(!run)
                 {
                     Logger.WriteLine("shutting down main loop");
-                    handleLoopExits();
+                    HandleLoopExits();
                     isReadyForShutdown = true;
                     continue;
                 }
-                
 
                 //get deltatime in seconds since last update
                 float deltaTime = (stopwatch.ElapsedTicks - currentDeltaTime) / (float)ticksPerSecond;
                 currentDeltaTime = stopwatch.ElapsedTicks;
                 //logger.WriteLine($"elapsedTicks: {stopwatch.ElapsedTicks}, currentTime: {currentTime}, ticksPerSecond: {ticksPerSecond} result: {deltaTime}");
                 FixedUpdate(deltaTime);
+                
                 foreach(Action action in FixedUpdateCallBack)
                 {
                     action.Invoke();
                 }
 
+                // get deltatime statistics
                 avrDeltaTimeQueue.Enqueue(deltaTime);
+                
                 float avrBuffer = 0f;
                 int avrCount = 0;
+
+                //if the buffer is bigger than the max amount of values permited, remove 1 till its within the allowed limit 
                 if(avrDeltaTimeQueue.Count > maxQueueSaveCount)
                 {
                     for(int i = avrDeltaTimeQueue.Count; i > maxQueueSaveCount; i--)
@@ -134,43 +156,54 @@ namespace WireLink
                     }
                 }
 
+                //count up each itteration
                 foreach(float value in avrDeltaTimeQueue)
                 {
                     avrCount++;
                     avrBuffer += value;
                 }
 
+                // (the rest of mainloop) calculate and wait for the remaining time to forfill targetUpdatesPerSecond
+
+                //compute the avarage
                 avrDeltaTime = avrBuffer / avrCount;
 
+                //check if current deltatime is bigger or smaller than the current max and min deltatime
                 if(deltaTime > maxDeltaTime) { maxDeltaTime = deltaTime; }
                 if(deltaTime < minDeltaTime) { minDeltaTime = deltaTime; }
                 //Logger.WriteLine($"deltaTime is {deltaTime}, avr deltaTime in the last {avrDeltaTimeQueue.Count / (float)targetUpdatesPerSecond} seconds is: {avrDeltaTime}, with a target deltaTime of {1f/targetUpdatesPerSecond}, max deltaTime is: {maxDeltaTime} and min deltaTime is: {minDeltaTime}");
 
 
-                long stopwatchBuffer = stopwatch.ElapsedTicks;
+                long currenTime = stopwatch.ElapsedTicks;
 
-                float extraMilisecondsThisIteration = (1f / targetUpdatesPerSecond * 1000) - ((stopwatchBuffer - currentExessTime) / (float)ticksPerSecond * 1000);
-                exessTime += extraMilisecondsThisIteration;
+                //get the ticks elapsed this iteration
+                long elapsedTicksSinceLastIteration = currenTime - timeAfterLastIteration;
+                //how many miliseconds there are leftover this iteration, goes to negative if it takes more than milisecondsPerUpdate
+                float milisecondsRemaining = milisecondsPerUpdate - (elapsedTicksSinceLastIteration / (float)ticksPerMilisecond);
 
-                float elapsedSeconds = (stopwatchBuffer - currentTime) / (float)ticksPerSecond;
-                float milisecondsRemaining = Math.Max(0, (milisecondsPerUpdate + exessTime) - (elapsedSeconds * 1000));
-                int sleepTime = (int)Math.Floor(milisecondsRemaining);
+                // keeps track of the time it needs to get back on track
+                //exessTime = Math.Min(0, exessTime + extraMilisecondsThisIteration);
 
+                //float elapsedSeconds = elapsedTicksSinceLastIteration / (float)ticksPerSecond;
 
-                //logger.WriteLine($"1: {stopwatchBuffer} 2: {currentTime} 3: {ticksPerSecond}");
-                //logger.WriteLine($"1: {stopwatchBuffer - currentTime} 2: {elapsedTime}");
-                //logger.WriteLine($"waiting for {remainingTime} miliseconds");
-                //logger.WriteLine($"1: {milisecondsPerUpdate} 2: {exessTime} 3: {milisecondsPerUpdate - exessTime} 4: {elapsedSeconds * 1000} 5: {milisecondsRemaining}");
-                //logger.WriteLine($"1: {(stopwatchBuffer - currentExessTime) / (float)ticksPerSecond} 2: {extraMilisecondsThisIteration}");
-                //logger.WriteLine($"update {deltaTime}, which is {(1 / (float)targetUpdatesPerSecond - deltaTime) * 1000} miliseconds away from the target deltaTime");
-                //logger.WriteLine($"1: {sleepTime} 2: {exessTime}");
+                //float milisecondsRemaining = Math.Max(0, milisecondsPerUpdate - (elapsedSeconds * 1000));
                 
-                currentExessTime = stopwatchBuffer;
+                int sleepTime = (int)Math.Round(milisecondsRemaining);
 
-                if(sleepTime >= 0)
+                long sleepTimer = stopwatch.ElapsedTicks;
+
+                //Logger.WriteLine($"milisecondsRemaining is: {milisecondsRemaining} and sleepTime is: {sleepTime - 1}");
+
+                if(sleepTime > 1)
                 {
-                    Thread.Sleep(sleepTime);
+                    //sleeps for the extra time this iteration, minus a bit to give the operating system time to regive control to the program
+                    Thread.Sleep(sleepTime - 1);
                 }
+
+                // waits for the remaing time caused by low sleep precision
+                while((stopwatch.ElapsedTicks - sleepTimer) / ticksPerMilisecond < milisecondsRemaining) { }
+                
+                timeAfterLastIteration = stopwatch.ElapsedTicks;
             }
             
             Logger.WriteLine("exiting main loop");
@@ -179,10 +212,11 @@ namespace WireLink
         {
             return true;
         }
+        bool shouldAcceptConnectionThreadRun = true;
         private int acceptConnectionThread()
         {
             bool resultBuffer;
-            resultBuffer = mainSocket.Listen(mainListiningPort);
+            resultBuffer = mainSocket.Listen(mainServerListiningPort);
             if(resultBuffer == false) { Logger.WriteLine("listen function ran into an error an has returned"); return 14; }
             int totalClientAcceptAttempts = 0;
             int failedAccepts = 0;
@@ -190,8 +224,6 @@ namespace WireLink
             {
                 //throws an eception if it failed to accept a connection too many times
                 if(failedAccepts >= 10) { throw new unknownThreadException("acceptConnectionThread ran into to many errors in a row and quit"); }
-
-
                 
                 //accept the next connection
                 Socket? tempSocket = mainSocket.Accept();
@@ -204,7 +236,7 @@ namespace WireLink
                 totalClientAcceptAttempts += 1;
 
                 // log
-
+ 
                 // handles the new socket
                 Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
                 Logger.WriteLine($"accepted {totalClientAcceptAttempts} clients so far!");
@@ -214,42 +246,119 @@ namespace WireLink
         }
         private void handleNewConnection(Socket socket)
         {
-            //initialize the socketHelper value
-            SocketHepler openClientSocket = new SocketHepler();
+            if(clientSockets == null)
+            {
+                clientSockets = new Dictionary<Guid, SocketHepler>();
+            }
 
-            // sets the socket to the newly created socket
-            openClientSocket.SetSocket(socket);
+            //initialize the socketHelper value
+            SocketHepler openClientSocket = new SocketHepler(socket);
 
             Logger.WriteLine("attempting to verify connection");
 
+            // allow the client to start recieving
+            Thread.Sleep(10);
+
             //test the connection with the new socket
-            if(!openClientSocket.verifyConnection()) { openClientSocket.terminate(); Logger.WriteLine("connection is invalid"); return; }
+            if(!openClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid"); openClientSocket.terminate(); return; }
 
             Logger.WriteLine("connection verified");
 
             //add the socket to the list of clients
-            clientSockets.Add(openClientSocket);
+            clientSockets.Add(Guid.NewGuid(), openClientSocket);
 
             return;
         }
         private void TerminateClients()
         {
-            Logger.WriteLine("starting termination of Clients", true);
-            foreach(SocketHepler clientSocket in clientSockets)
+            if(clientSockets == null)
             {
-                clientSocket.terminate();
+                clientSockets = new Dictionary<Guid, SocketHepler>();
+            }
+
+            Logger.WriteLine("starting termination of Clients", true);
+
+            Guid[] ids = clientSockets.Keys.ToArray();
+
+            foreach(Guid id in ids)
+            {   
+                clientSockets[id].terminate();
                 Logger.WriteLine("client terminated", true);
             }
         }
-
-        // all public methods
-
-
-        public int Start()
+        private void initServerValues()
         {
+            clientSockethreads = new List<Thread>();
+            clientSockets = new Dictionary<Guid, SocketHepler>();
+        }
+
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+        // PPPP   U   U  BBBBB   L      III  CCCC       M   M  EEEEE  TTTTTTT  H   H  OOO   DDDD   SSSS
+        // p   p  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
+        // P   P  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
+        // PPPP   U   U  BBBBB   L       I   C          M M M  EEEE      T     HHHH  O   O  D   D  SSS
+        // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
+        // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
+        // P       UUU   BBBBB   LLLLL  III  CCCC       M   M  EEEEE     T     H   H  OOO   DDDD  SSSS
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+        private ServerType _serverType;
+        public ServerType ServerType
+        {
+            get { return _serverType; }
+        }
+        /// <summary>
+        /// the adress if the server. doesnt do anything of ServerType is Server.
+        /// </summary>
+        public IPEndPoint? serverAdress = null;
+
+        public int StartServer()
+        {
+            _serverType = ServerType.Server;
+
+            Logger.WriteLine("attaching exeptionhandler", true, 5);
+            AppDomain currentDomain = AppDomain.CurrentDomain;
+            currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+
+            initServerValues();
+
+            mainSocket = new SocketHepler(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp));
+
+            InitServerLoops();
+            
+            Thread.Sleep(2);
+
+            mainLoop();
+            
+            return 0;
+        }
+        public readonly IPEndPoint emptyIPEndPoint = new IPEndPoint(IPAddress.Any, 0);
+        /// <summary>
+        /// starts a client and connects to a server
+        /// </summary>
+        /// <param name="serverAdress">the ip and port to connect to</param>
+        /// <returns></returns>
+        public int StartClient(IPEndPoint serverAdress)
+        {
+            if(serverAdress == emptyIPEndPoint)
+            {
+                return 2;
+            }
+
+            _serverType = ServerType.Client;
+
             Logger.WriteLine("attaching exeptionhandler", true);
             AppDomain currentDomain = AppDomain.CurrentDomain;
             currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+
+            InitClientLoops();
+            
+            Thread.Sleep(2);
+
+            mainSocket.Init(serverAdress, new IPEndPoint(serverAdress.Address, mainClientListiningPort));
+
+            ConnectToServer();
 
             mainLoop();
             
@@ -267,14 +376,13 @@ namespace WireLink
 
             //connects to the local open socket to unblock the thread.
             Socket clientToUnlockAccept = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            IPEndPoint ep = new IPEndPoint(IPAddress.Loopback, mainListiningPort);
+            IPEndPoint ep = new IPEndPoint(IPAddress.Loopback, mainServerListiningPort);
             clientToUnlockAccept.Blocking = true;
             clientToUnlockAccept.Connect(ep);
 
             if(clientToUnlockAccept.Connected) { Logger.WriteLine("local loopback connection etstablished", true); }
             
             Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logger.WriteLine("TerminateClients completed", true); });
-
 
             terminateClients.Wait();
 
@@ -286,21 +394,59 @@ namespace WireLink
             //stop the current instance
             Stop();
 
-            //reninit all values
-            mainSocket = new SocketHepler();
-            clientSockets = new List<SocketHepler>();
+            //reinit all values
             run = true;
-            shouldAcceptConnectionThreadRun = true;
-            handleLoopExitsCallBack = new List<Action>();
+            //handleLoopExitsCallBack = new List<Action>();
             FixedUpdateCallBack = new List<Action>();
             incementer = 0;
 
-            //start the current instance
-            Start();
+            if(_serverType == ServerType.Server)
+            {
+                shouldAcceptConnectionThreadRun = true;
+                //start the server
+                StartServer();
+            }
+            if(_serverType == ServerType.Client)
+            {
+                StartClient(serverAdress ?? emptyIPEndPoint);
+            }
         }
-        public void sendMessage()
+        /// <summary>
+        /// if ServerType is Client send a message to the server, if its a Server send it to all clients 
+        /// </summary>
+        /// <param name="message">the byte message to send</param>
+        public void sendMessage(byte[] message)
         {
             
+        }
+        /// <summary>
+        /// sends a message to a specefic client. returns without doing anything if ServerType is not server.
+        /// </summary>
+        /// <param name="message">the byte message to send</param>
+        /// <param name="guid">the guid of the client the message should be send to</param>
+        public void sendMessage(byte[] message, Guid guid)
+        {
+            if(_serverType != ServerType.Server) { return; }
+        }
+
+        /// <summary>
+        /// sends a message to an array of client. returns without doing anything if ServerType is not server.
+        /// </summary>
+        /// <param name="message">the byte message to send</param>
+        /// <param name="guids">the guids of the clients to send the messages to</param>
+        public void sendMessage(byte[] message, Guid[] guids)
+        {
+
+        }
+
+        /// <summary>
+        /// sends a message to all but one client. returns without doing anything if ServerType is not server.
+        /// </summary>
+        /// <param name="message">the byte message to send</param>
+        /// <param name="guid">the guid of the client the message shouldt be send to</param>
+        public void sendMessageToAllButOne(byte[] message, Guid guid)
+        {
+
         }
 
         void CleanUp(object sender, UnhandledExceptionEventArgs args)
@@ -320,6 +466,7 @@ namespace WireLink
                 Logger.WriteLine("stopping server, caused by cleanup", true, 4);
 
                 Stop();
+                
                 Logger.WriteLine("full cleanup succesfull");
             }
             catch
