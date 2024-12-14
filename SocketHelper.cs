@@ -348,19 +348,14 @@ namespace WireLink
                 if(StartRecieve() == false) { return false; }
             }
 
-            Logger.WriteLine("[verifyServerConnection] test1");
 
             Stopwatch timeout = Stopwatch.StartNew();
             //checks whether the connection has returned, or the timeout has ran out
-            Logger.WriteLine("[verifyServerConnection] test2");
             while((isSuccess == null && timeout.ElapsedMilliseconds < timeoutTime) || (isSuccess == null && timeoutTime == 0))
             {
-                Logger.WriteLine("[verifyServerConnection] test3");
                 Thread.Sleep(25);
             }
             timeout.Stop();
-
-            Logger.WriteLine("[verifyServerConnection] test4");
 
             recieveDeligates.RemoveAt(deligateId);
 

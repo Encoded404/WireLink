@@ -333,7 +333,7 @@ namespace WireLink
             
             return 0;
         }
-        public readonly IPEndPoint emptyIPEndPoint = new IPEndPoint(IPAddress.Any, 0);
+        public static readonly IPEndPoint emptyIPEndPoint = new IPEndPoint(IPAddress.Any, 0);
         /// <summary>
         /// starts a client and connects to a server
         /// </summary>
