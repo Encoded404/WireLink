@@ -337,6 +337,10 @@ namespace WireLink
                 Task.Run(() => action((Guid)myGuid));
             }
         }
+        public void SendTerminate()
+        {
+            SendRaw((byte)byteCodes.terminateConnection);
+        }
         bool isConnectionValid = false;
         Random randomIdGenerator = new Random();
         /// <summary>
@@ -390,7 +394,7 @@ namespace WireLink
             //if no more retries are left return with a failed connection.
             if(triesLeft <= 0) { SendRaw((byte)byteCodes.terminateConnection); return false; }
             
-            Logger.WriteLine("[verifySingleClientConnection] recieved server verify response", true, 5);
+            Logger.WriteLine("[verifySingleClientConnection] recieved verification response", true, 5);
 
             //if the recieved data is the wrong size, retry.
             if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]); triesLeft--; return null; }

@@ -526,5 +526,10 @@ namespace WireLink
                 }
             }
         }
+
+        public void SendTerminate()
+        {
+            mainSocket.SendTerminate();
+        }
     }
 }
