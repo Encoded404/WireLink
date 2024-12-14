@@ -81,6 +81,10 @@ namespace WireLink
 
             return;
         }
+        private void startFixedUpdate()
+        {
+            heartBeatTimer.Start();
+        }
         /// <summary>
         /// a deligate being called targetUpdatesPerSecond times every second
         /// </summary>
@@ -120,6 +124,8 @@ namespace WireLink
             float avrDeltaTime = 0f;
             float maxDeltaTime = 0f;
             float minDeltaTime = 1f;
+
+            startFixedUpdate();
 
             Logger.WriteLine($"running main loop at a Frequency of {targetUpdatesPerSecond} updates per second, timer has a reselution of {ticksPerSecond} ticks per seconds");
             stopwatch.Start();
