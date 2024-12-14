@@ -52,10 +52,14 @@ namespace WireLink
 
         }
 
-        private void ConnectToServer()
+        private bool ConnectToServer()
         {
             mainSocket.Connect();
-            mainSocket.verifyServerConnection();
+            bool isVerified = mainSocket.verifyServerConnection();
+
+            if(!isVerified) { Logger.WriteLine("couldn't verify server connection"); return false; }
+
+            return true;
         }
 
         /* /// <summary>
@@ -82,13 +86,20 @@ namespace WireLink
         /// </summary>
         public List<Action> FixedUpdateCallBack = new List<Action>();
         int incementer = 0;
+        Stopwatch heartBeatTimer = new Stopwatch();
         private void FixedUpdate(float deltaTime)
         {
             incementer++;
-            if(incementer > 0)
+            if(incementer > 10)
             {
                 incementer = 0;
                 //Logger.WriteLine("test", true);
+            }
+
+            if(heartBeatTimer.ElapsedMilliseconds > 500 && ServerType == ServerType.Server)
+            {
+                heartBeatTimer.Restart();
+                sendHeartBeat();
             }
         }
         readonly long ticksPerSecond = Stopwatch.Frequency;
@@ -292,6 +303,15 @@ namespace WireLink
             clientSockets = new Dictionary<Guid, SocketHepler>();
         }
 
+        void sendHeartBeat()
+        {
+            if(clientSockets == null) { throw new InvalidOperationException("clientSockets was null"); }
+            foreach(SocketHepler socket in clientSockets.Values)
+            {
+                socket.sendHeartBeat();
+            }
+        }
+
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
         // PPPP   U   U  BBBBB   L      III  CCCC       M   M  EEEEE  TTTTTTT  H   H  OOO   DDDD   SSSS
         // p   p  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
@@ -356,9 +376,11 @@ namespace WireLink
             
             Thread.Sleep(2);
 
-            mainSocket.Init(serverAdress, new IPEndPoint(serverAdress.Address, mainClientListiningPort));
+            mainSocket.Init(serverAdress);
 
-            ConnectToServer();
+            bool isConnected = ConnectToServer();
+
+            if(!isConnected) { return 13; }
 
             mainLoop();
             

@@ -8,13 +8,14 @@ namespace WireLink
 {
     public enum byteCodes : byte
     {
-        terminateConnection = 0,
-        messageHeaderStart = 1,
-        messageHeaderEnd = 2,
-        verifyConnection = 3,
-        verifyConnectionCallback = 4,
-        connectionVerified = 5,
-        recievedInvalidData = 6,
+        terminateConnection,
+        messageHeaderStart,
+        messageHeaderEnd,
+        verifyConnection,
+        verifyConnectionCallback,
+        connectionVerified,
+        recievedInvalidData,
+        heartBeat
     }
 
     class SocketHepler
@@ -41,12 +42,10 @@ namespace WireLink
             isTerminated = false;
         }
 
-        public bool Init(IPEndPoint remoteEndPoint, IPEndPoint localEndPoint)
+        public bool Init(IPEndPoint remoteEndPoint)
         {
-            this.endPoint = remoteEndPoint;
+            endPoint = remoteEndPoint;
             socket = new Socket(remoteEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-
-            socket.Bind(localEndPoint);
 
             isTerminated = false;
 
@@ -84,12 +83,12 @@ namespace WireLink
         }
         public bool Listen(int port)
         {
-            if(socket == null || isTerminated) { isTerminated = true; Logger.WriteLine("socket was invalid, returning."); return false; }
+            if(socket == null || isTerminated) { isTerminated = true; Logger.WriteLine("[Listen] socket was invalid, returning."); return false; }
 
             IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
             socket.Bind(ep);
 
-            Logger.WriteLine("listining port created and opened");
+            Logger.WriteLine("[Listen] listining port created and opened");
             socket.Listen();
 
             return true;
@@ -97,11 +96,11 @@ namespace WireLink
         public Socket? Accept()
         {
             //return if the current socket is not defined
-            if(socket == null || isTerminated) { isTerminated = true; Logger.WriteLine("socket was null, returning. (acceptCall)"); return null; }
+            if(socket == null || isTerminated) { isTerminated = true; Logger.WriteLine("[accept] socket was null, returning. (acceptCall)"); return null; }
             
-            Logger.WriteLine($"ready to accept a new client.");
+            Logger.WriteLine($"[accept] ready to accept a new client.");
             Socket returnValue = socket.Accept();
-            Logger.WriteLine("connection accepted");
+            Logger.WriteLine("[accept] connection accepted");
             return returnValue;
         }
         public bool Send(byte[] data)
@@ -136,6 +135,7 @@ namespace WireLink
 
             SendRaw([data]);
         }
+
         public bool Recieve()
         {
             return StartRecieve();
@@ -211,6 +211,13 @@ namespace WireLink
                 else { return false; }
                 //check if buffer recieved any data
                 if(!hasRecievedData) { continue;}
+
+                if(buffer[0] == (byte)byteCodes.heartBeat)
+                {
+                    Logger.WriteLine("recieved heartbeat", true, 5);
+                    continue;
+                }
+
                 Logger.WriteLine("[recieveFunc] recieved data and invoking callbacks", true, 5);
                 foreach (Action<byte[]> func in recieveDeligates)
                 {
@@ -335,7 +342,7 @@ namespace WireLink
         public bool verifyServerConnection(uint timeoutTime = 1500, byte retries = 3)
         {
 
-            Logger.WriteLine("[verifyServerConnection] verifing server connection");
+            Logger.WriteLine("[verifyServerConnection] verifing server connection", true, 4);
 
             bool? isSuccess = null;
             //sets the id of our deligate to the position it will occupy
@@ -361,6 +368,8 @@ namespace WireLink
 
             if(timeout.ElapsedMilliseconds >= timeoutTime) { Logger.WriteLine("[verifyServerConnection] could not verify server connection, connection timed out"); isConnectionValid = false; return false; }
             if(retries <= 0) { Logger.WriteLine("[verifyServerConnection] could not verify server connection, couldnt reach or recognize the server"); isConnectionValid = false; return false; }
+
+            if(isSuccess ?? false) { Logger.WriteLine("[verifyServerConnection] connection verified", true, 4); }
 
             isConnectionValid = isSuccess ?? false;
             return isSuccess ?? false;
@@ -388,5 +397,10 @@ namespace WireLink
 
             return null;
         }
+
+        public void sendHeartBeat()
+        {
+            SendRaw((byte)byteCodes.heartBeat);
+        } 
     }
 }
