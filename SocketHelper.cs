@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using ConsoleLogger;
 using System.Net;
 using System.Diagnostics;
+using System.Threading.Tasks.Dataflow;
 
 
 namespace WireLink
@@ -21,7 +22,11 @@ namespace WireLink
     class SocketHepler
     {
         private Socket? socket = null;
-        bool isTerminated = true;
+        bool _isTerminated = true;
+        public bool isTerminated
+        {
+            get { return _isTerminated; }
+        }
         public Socket? mainSocket
         {
             get { return socket; }
@@ -39,7 +44,13 @@ namespace WireLink
         public SocketHepler(Socket socket)
         {
             this.socket = socket;
-            isTerminated = false;
+            _isTerminated = false;
+        }
+        public SocketHepler(Socket socket, Guid guid)
+        {
+            this.socket = socket;
+            _isTerminated = false;
+            myGuid = guid;
         }
 
         public bool Init(IPEndPoint remoteEndPoint)
@@ -47,7 +58,7 @@ namespace WireLink
             endPoint = remoteEndPoint;
             socket = new Socket(remoteEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
-            isTerminated = false;
+            _isTerminated = false;
 
             return true;
         }
@@ -55,17 +66,17 @@ namespace WireLink
         {
             if(socket != null)
             {
-                terminate();
+                Terminate();
             }
             
             this.socket = socket;
-            isTerminated = false;
+            _isTerminated = false;
 
             return true;
         }
         public bool Connect()
         {
-            if (socket == null || endPoint == null || isTerminated) { isTerminated = true; Logger.WriteLine("socket or endpoint was invalid, returning."); return false; }
+            if (socket == null || endPoint == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("socket or endpoint was invalid, returning."); return false; }
 
             socket.Connect(endPoint);
 
@@ -83,7 +94,7 @@ namespace WireLink
         }
         public bool Listen(int port)
         {
-            if(socket == null || isTerminated) { isTerminated = true; Logger.WriteLine("[Listen] socket was invalid, returning."); return false; }
+            if(socket == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("[Listen] socket was invalid, returning."); return false; }
 
             IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
             socket.Bind(ep);
@@ -96,7 +107,7 @@ namespace WireLink
         public Socket? Accept()
         {
             //return if the current socket is not defined
-            if(socket == null || isTerminated) { isTerminated = true; Logger.WriteLine("[accept] socket was null, returning. (acceptCall)"); return null; }
+            if(socket == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("[accept] socket was null, returning. (acceptCall)"); return null; }
             
             Logger.WriteLine($"[accept] ready to accept a new client.");
             Socket returnValue = socket.Accept();
@@ -106,7 +117,7 @@ namespace WireLink
         public bool Send(byte[] data)
         {
             //return if the current socket is not defined
-            if(socket == null || isTerminated || !socket.Connected) { isTerminated = true; Logger.WriteLine("socket was invalid, returning."); return false; }
+            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; Logger.WriteLine("socket was invalid, returning."); return false; }
             //return if the current socket hasnt been validated
             if(!isConnectionValid) { Logger.WriteLine("connection isnt valid, returning."); return false; }
 
@@ -122,7 +133,7 @@ namespace WireLink
         private void SendRaw(byte[] data)
         {
             //return if the current socket is not defined
-            if(socket == null || isTerminated || !socket.Connected) { isTerminated = true; Logger.WriteLine("[SendRaw] socket is invalid, returning."); return; }
+            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; Logger.WriteLine("[SendRaw] socket is invalid, returning."); return; }
             
             if(data.Length > byte.MaxValue) {  Logger.WriteLine("[SendRaw] data array is too large", true, 3); return;}
             socket.Send([(byte)data.Length]);
@@ -151,7 +162,7 @@ namespace WireLink
         private bool StartRecieve()
         {
             //return if the current socket is not defined
-            if(socket == null || isTerminated) { Logger.WriteLine("socket was null, returning."); return false; }
+            if(socket == null || _isTerminated) { Logger.WriteLine("socket was null, returning."); return false; }
 
             isRecieving = true;
             recieveThread = new Thread(() => recieveFunc());
@@ -176,9 +187,9 @@ namespace WireLink
                 {
                     try
                     {
-                        Logger.WriteLine($"[recieveFunc] socket blocking: {socket.Blocking} isterminated: {isTerminated} is connected: {socket.Connected}", true, 7);
+                        Logger.WriteLine($"[recieveFunc] socket blocking: {socket.Blocking} isterminated: {_isTerminated} is connected: {socket.Connected}", true, 7);
                         socket.Receive(buffer, buffer.Length, 0);
-                        if(isTerminated || !socket.Connected) { return false; }
+                        if(_isTerminated || !socket.Connected) { return false; }
                         int bufferSize = buffer[0];
                         if(bufferSize <= 0) { continue; }
                         Logger.WriteLine("[recieveFunc] bufferSize is: "+bufferSize, true, 6);
@@ -212,11 +223,20 @@ namespace WireLink
                 //check if buffer recieved any data
                 if(!hasRecievedData) { continue;}
 
-                if(buffer[0] == (byte)byteCodes.heartBeat)
+                bool shouldCallDeligates = true;
+                switch (buffer[0])
                 {
-                    Logger.WriteLine("recieved heartbeat", true, 5);
-                    continue;
+                    case (byte)byteCodes.heartBeat:
+                        Logger.WriteLine("recieved heartbeat", true, 5);
+                        shouldCallDeligates = false;
+                        break;
+                    case (byte)byteCodes.terminateConnection:
+                        Logger.WriteLine("remote socket was terminated", true, 5);
+                        handleRemoteTerminate();
+                        shouldCallDeligates = false;
+                        break;
                 }
+                if(!shouldCallDeligates) { continue; }
 
                 Logger.WriteLine("[recieveFunc] recieved data and invoking callbacks", true, 5);
                 foreach (Action<byte[]> func in recieveDeligates)
@@ -226,19 +246,72 @@ namespace WireLink
             }
             return true;
         }
+
+        Guid? myGuid = null;
+
+        /// <summary>
+        /// a deligate being called opun termination of the socket
+        /// </summary>
+        public List<Action<Guid>> terminateDeligate = new List<Action<Guid>>();
+
         /// <summary>
         /// closes a socket
         /// </summary>
         /// <returns></returns>
-        public bool terminate()
+        public bool Terminate()
         {
             Logger.WriteLine("[terminate function] terminating socket", true, 4);
 
             //if the socket is defined, terminate it
             if(socket != null)
             {
+                if(_isTerminated)
+                {
+                    return true;
+                }
                 SendRaw((byte)byteCodes.terminateConnection);
-                isTerminated = true;
+                _isTerminated = true;
+                try
+                {
+                    if(isRecieving)
+                    {
+                        StopRecieve();
+                    }
+                    Logger.WriteLine("[terminate function] shutting down socket", true, 5);
+                    socket.Shutdown(SocketShutdown.Both);
+                    socket.Disconnect(false);
+                } catch (Exception e) { Logger.WriteLine("[terminate function] socket failed to terminate: \n" + e); return false; }
+                finally
+                {
+                    Logger.WriteLine("[terminate function] disposing socket", true, 5);
+                    socket.Close();
+                    socket.Dispose(); //socket.dispose is redundant, but is included for readebility and redundancy
+                }
+                Logger.WriteLine("[terminate function] socket disposed", true, 5);
+            }
+            else
+            {
+                Logger.WriteLine("[terminate function] socket was null on termninate", true, 5);
+            }
+
+            foreach(Action<Guid> action in terminateDeligate)
+            {
+                if(myGuid == null) { break; }
+                Task.Run(() => action((Guid)myGuid));
+            }
+
+            Logger.WriteLine("[terminate function] returning from terminate function", true, 5);
+
+            return true;
+        }
+
+        private void handleRemoteTerminate()
+        {
+            //if the socket is defined, terminate it
+            if(socket != null)
+            {
+                _isTerminated = true;
+
                 try
                 {
                     if(isRecieving)
@@ -257,12 +330,12 @@ namespace WireLink
                 }
                 Logger.WriteLine("[terminate function] socket disposed", true, 5);
             }
-            else
+
+            foreach(Action<Guid> action in terminateDeligate)
             {
-                Logger.WriteLine("[terminate function] socket was null on termninate", true, 5);
+                if(myGuid == null) { break; }
+                Task.Run(() => action((Guid)myGuid));
             }
-            Logger.WriteLine("[terminate function] returning from terminate function", true, 5);
-            return true;
         }
         bool isConnectionValid = false;
         Random randomIdGenerator = new Random();

@@ -268,8 +268,10 @@ namespace WireLink
                 clientSockets = new Dictionary<Guid, SocketHepler>();
             }
 
+            Guid clientGuid = Guid.NewGuid();
+
             //initialize the socketHelper value
-            SocketHepler openClientSocket = new SocketHepler(socket);
+            SocketHepler openClientSocket = new SocketHepler(socket, clientGuid);
 
             Logger.WriteLine("attempting to verify connection");
 
@@ -277,12 +279,14 @@ namespace WireLink
             Thread.Sleep(10);
 
             //test the connection with the new socket
-            if(!openClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid"); openClientSocket.terminate(); return; }
+            if(!openClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid"); openClientSocket.Terminate(); return; }
 
             Logger.WriteLine("connection verified");
 
+            openClientSocket.terminateDeligate.Add(TerminateSingleClient);
+
             //add the socket to the list of clients
-            clientSockets.Add(Guid.NewGuid(), openClientSocket);
+            clientSockets.Add(clientGuid, openClientSocket);
 
             return;
         }
@@ -298,10 +302,22 @@ namespace WireLink
             Guid[] ids = clientSockets.Keys.ToArray();
 
             foreach(Guid id in ids)
-            {   
-                clientSockets[id].terminate();
-                Logger.WriteLine("client terminated", true);
+            {
+                TerminateSingleClient(id);
             }
+        }
+
+        private void TerminateSingleClient(Guid clientGuid)
+        {
+            if(clientSockets == null)
+            {
+                clientSockets = new Dictionary<Guid, SocketHepler>();
+            }
+
+            if(!clientSockets[clientGuid].isTerminated) { clientSockets[clientGuid].Terminate(); }
+
+            clientSockets.Remove(clientGuid);
+            Logger.WriteLine("client terminated", true, 4);
         }
         private void initServerValues()
         {
