@@ -243,7 +243,13 @@ namespace WireLink
                 if(failedAccepts >= 10) { throw new unknownThreadException("acceptConnectionThread ran into to many errors in a row and quit"); }
                 
                 //accept the next connection
-                Socket? tempSocket = mainSocket.Accept();
+                Socket? tempSocket = null;
+                try
+                {
+                    tempSocket = mainSocket.Accept();
+                }
+                // socket was closed
+                catch (ObjectDisposedException) { Logger.WriteLine("accept socket was shutdown", true, 4); }
                 
                 //if the connection is invalid, increase failedAccept value
                 if( tempSocket == null || !isConnectionValid(tempSocket) ) { failedAccepts++; continue; }
@@ -418,13 +424,8 @@ namespace WireLink
 
             Logger.WriteLine("closing local socket");
 
-            //connects to the local open socket to unblock the thread.
-            Socket clientToUnlockAccept = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            IPEndPoint ep = new IPEndPoint(IPAddress.Loopback, mainServerListiningPort);
-            clientToUnlockAccept.Blocking = true;
-            clientToUnlockAccept.Connect(ep);
-
-            if(clientToUnlockAccept.Connected) { Logger.WriteLine("local loopback connection etstablished", true); }
+            //terminate the listening socket
+            mainSocket.Terminate();
             
             Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logger.WriteLine("TerminateClients completed", true); });
 
