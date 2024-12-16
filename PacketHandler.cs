@@ -240,7 +240,8 @@ namespace WireLink
             while (shouldAcceptConnectionThreadRun)
             {
                 //throws an eception if it failed to accept a connection too many times
-                if(failedAccepts >= 10) { throw new unknownThreadException("acceptConnectionThread ran into to many errors in a row and quit"); }
+                if(failedAccepts >= 10) { throw new unknownThreadException("[acceptConnectionThread] ran into to many errors in a row and quit"); }
+                if(mainSocket.isTerminated) { Logger.WriteLine("[acceptConnectionThread] accept connection thread has shoudown"); return -1; }
                 
                 //accept the next connection
                 Socket? tempSocket = null;
@@ -249,7 +250,7 @@ namespace WireLink
                     tempSocket = mainSocket.Accept();
                 }
                 // socket was closed
-                catch (ObjectDisposedException) { Logger.WriteLine("accept socket was shutdown", true, 4); }
+                catch (SocketException) { Logger.WriteLine("[acceptConnectionThread] accept socket was shutdown", true, 4); break; }
                 
                 //if the connection is invalid, increase failedAccept value
                 if( tempSocket == null || !isConnectionValid(tempSocket) ) { failedAccepts++; continue; }
@@ -262,8 +263,7 @@ namespace WireLink
  
                 // handles the new socket
                 Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
-                Logger.WriteLine($"accepted {totalClientAcceptAttempts} clients so far!");
-
+                Logger.WriteLine($"[acceptConnectionThread] accepted {totalClientAcceptAttempts} clients so far!", true, 3);
             }
             return 0;
         }
@@ -500,7 +500,7 @@ namespace WireLink
 
             Exception e = (Exception) args.ExceptionObject;
             Logger.WriteLine("CleanUp caught : " + e.Message);
-            Logger.WriteLine("Runtime terminating: {0}", args.IsTerminating);
+            Logger.WriteLine($"Runtime terminating: {args.IsTerminating}");
 
             try
             {

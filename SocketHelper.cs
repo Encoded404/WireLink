@@ -121,30 +121,43 @@ namespace WireLink
             //return if the current socket hasnt been validated
             if(!isConnectionValid) { Logger.WriteLine("connection isnt valid, returning."); return false; }
 
-            if(data.Length > byte.MaxValue) {  Logger.WriteLine("data array is too large", true, 3); return false;}
-            socket.Send([(byte)data.Length]);
-            socket.Send(data);
-            return true;
+            return SendRaw(data);
         }
         public bool send(byte data)
         {
             return Send([data]);
         }
-        private void SendRaw(byte[] data)
+        private bool SendRaw(byte[] data)
         {
             //return if the current socket is not defined
-            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; Logger.WriteLine("[SendRaw] socket is invalid, returning."); return; }
+            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; handleRemoteTerminate(); Logger.WriteLine("[SendRaw] socket is invalid, returning."); return false; }
             
-            if(data.Length > byte.MaxValue) {  Logger.WriteLine("[SendRaw] data array is too large", true, 3); return;}
-            socket.Send([(byte)data.Length]);
-            socket.Send(data);
+            if(data.Length > byte.MaxValue) {  Logger.WriteLine("[SendRaw] data array is too large", true, 3); return false;}
+
+            try
+            {
+                socket.Send([(byte)data.Length]);
+                socket.Send(data);
+            }
+            catch(SocketException ex)
+            {
+                if(ex.ErrorCode == 32)
+                {
+                    Logger.WriteLine("remote socket was terminated abrubtly", true); handleRemoteTerminate();
+                    return false;
+                }
+
+                throw;
+            }
+
+            return true;
         }
-        private void SendRaw(byte data)
+        private bool SendRaw(byte data)
         {
             //return if the current socket is not defined
-            if(socket == null) { Logger.WriteLine("[SendRaw] socket is invalid, returning."); return; }
+            if(socket == null) { Logger.WriteLine("[SendRaw] socket is invalid, returning."); return false; }
 
-            SendRaw([data]);
+            return SendRaw([data]);
         }
 
         public bool Recieve()
@@ -279,7 +292,10 @@ namespace WireLink
                     }
                     Logger.WriteLine("[terminate function] shutting down socket", true, 5);
                     socket.Shutdown(SocketShutdown.Both);
-                    socket.Disconnect(false);
+                    if(socket.Connected)
+                    {
+                        socket.Disconnect(false);
+                    }
                 } catch (Exception e) { Logger.WriteLine("[terminate function] socket failed to terminate: \n" + e); return false; }
                 finally
                 {
@@ -311,24 +327,26 @@ namespace WireLink
             if(socket != null)
             {
                 _isTerminated = true;
-
                 try
                 {
                     if(isRecieving)
                     {
                         StopRecieve();
                     }
-                    Logger.WriteLine("[terminate function] shutting down socket", true, 5);
+                    Logger.WriteLine("[remote terminate function] shutting down socket", true, 5);
                     socket.Shutdown(SocketShutdown.Both);
-                    socket.Disconnect(false);
-                } catch (Exception e) { Logger.WriteLine("[terminate function] socket failed to terminate: \n" + e); }
+                    if(socket.Connected)
+                    {
+                        socket.Disconnect(false);
+                    }
+                } catch (Exception e) { Logger.WriteLine("[remote terminate function] socket failed to terminate: \n" + e); }
                 finally
                 {
-                    Logger.WriteLine("[terminate function] disposing socket", true, 5);
+                    Logger.WriteLine("[remote terminate function] disposing socket", true, 5);
                     socket.Close();
                     socket.Dispose(); //socket.dispose is redundant, but is included for readebility and redundancy
                 }
-                Logger.WriteLine("[terminate function] socket disposed", true, 5);
+                Logger.WriteLine("[remote terminate function] socket disposed", true, 5);
             }
 
             foreach(Action<Guid> action in terminateDeligate)
