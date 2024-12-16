@@ -526,6 +526,7 @@ namespace WireLink
                     Logger.WriteLine("cleanup failed completly");
                 }
             }
+            Console.Out.Flush();
         }
 
         public void SendTerminate()

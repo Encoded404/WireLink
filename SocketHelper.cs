@@ -291,9 +291,9 @@ namespace WireLink
                         StopRecieve();
                     }
                     Logger.WriteLine("[terminate function] shutting down socket", true, 5);
-                    socket.Shutdown(SocketShutdown.Both);
                     if(socket.Connected)
                     {
+                        socket.Shutdown(SocketShutdown.Both);
                         socket.Disconnect(false);
                     }
                 } catch (Exception e) { Logger.WriteLine("[terminate function] socket failed to terminate: \n" + e); return false; }
@@ -334,9 +334,9 @@ namespace WireLink
                         StopRecieve();
                     }
                     Logger.WriteLine("[remote terminate function] shutting down socket", true, 5);
-                    socket.Shutdown(SocketShutdown.Both);
                     if(socket.Connected)
                     {
+                        socket.Shutdown(SocketShutdown.Both);
                         socket.Disconnect(false);
                     }
                 } catch (Exception e) { Logger.WriteLine("[remote terminate function] socket failed to terminate: \n" + e); }
