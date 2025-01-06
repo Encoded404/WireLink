@@ -7,7 +7,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace WireLink
 {
-    public enum byteCodes : byte
+    internal enum byteCodes : byte
     {
         terminateConnection,
         messageHeaderStart,
@@ -19,7 +19,7 @@ namespace WireLink
         heartBeat
     }
 
-    class SocketHepler
+    internal class SocketHepler
     {
         private Socket? socket = null;
         bool _isTerminated = true;
@@ -164,7 +164,7 @@ namespace WireLink
         {
             return StartRecieve();
         }
-        public bool Recieve(Action<byte[]> functionCallback)
+        public bool AddReciever(Action<byte[]> functionCallback)
         {
             if(!StartRecieve()) { return false; } 
 
@@ -178,7 +178,7 @@ namespace WireLink
             if(socket == null || _isTerminated) { Logger.WriteLine("socket was null, returning."); return false; }
 
             isRecieving = true;
-            recieveThread = new Thread(() => recieveFunc());
+            recieveThread = new Thread(() => RecieveFunc());
             recieveThread.Start();
 
             return true;
@@ -189,7 +189,7 @@ namespace WireLink
             Logger.WriteLine("stopped recieving", true, 5);
             return true;
         }
-        bool recieveFunc()
+        bool RecieveFunc()
         {
             Logger.WriteLine("[recieveFunc] starting recievefunc", true, 5);
             while(isRecieving)
@@ -203,7 +203,7 @@ namespace WireLink
                         Logger.WriteLine($"[recieveFunc] socket blocking: {socket.Blocking} isterminated: {_isTerminated} is connected: {socket.Connected}", true, 7);
                         socket.Receive(buffer, buffer.Length, 0);
                         if(_isTerminated || !socket.Connected) { return false; }
-                        int bufferSize = buffer[0];
+                        short bufferSize = buffer[0];
                         if(bufferSize <= 0) { continue; }
                         Logger.WriteLine("[recieveFunc] bufferSize is: "+bufferSize, true, 6);
                         buffer = new byte[bufferSize];

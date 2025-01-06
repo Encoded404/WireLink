@@ -11,6 +11,10 @@
     <ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.IO.Hashing" Version="9.0.0" />
+  </ItemGroup>
+
   <Import Project="Unity.targets" Condition="'$(UnityBuild)' == 'true'" />
 
 </Project>

@@ -5,7 +5,7 @@ using ConsoleLogger;
 
 namespace WireLink
 {
-    public enum ServerType
+    internal enum ServerType
     {
         Client,
         Server,
@@ -16,7 +16,7 @@ namespace WireLink
         public unknownThreadException(string message)
         : base(message) { }
     }
-    public class PacketHandler
+    internal class PacketHandler
     {
         /// <summary>
         /// the main packetHandler intance
@@ -58,6 +58,8 @@ namespace WireLink
             bool isVerified = mainSocket.verifyServerConnection();
 
             if(!isVerified) { Logger.WriteLine("couldn't verify server connection"); return false; }
+
+            
 
             return true;
         }
@@ -106,9 +108,15 @@ namespace WireLink
                 sendHeartBeat();
             }
         }
+        private void StartMainLoop()
+        {
+            MainLoopThread = new Thread(MainLoop);
+            MainLoopThread.Start();
+        }
         readonly long ticksPerSecond = Stopwatch.Frequency;
         readonly long ticksPerMilisecond = Stopwatch.Frequency / 1000;
-        private void mainLoop()
+        private Thread? MainLoopThread;
+        private void MainLoop()
         {
             bool isReadyForShutdown = false;
 
@@ -262,12 +270,12 @@ namespace WireLink
                 // log
  
                 // handles the new socket
-                Task handleNewConnectionTask = Task.Run(() => {handleNewConnection(tempSocket); });
+                Task handleNewConnectionTask = Task.Run(() => {HandleNewConnection(tempSocket); });
                 Logger.WriteLine($"[acceptConnectionThread] accepted {totalClientAcceptAttempts} clients so far!", true, 3);
             }
             return 0;
         }
-        private void handleNewConnection(Socket socket)
+        private void HandleNewConnection(Socket socket)
         {
             if(clientSockets == null)
             {
@@ -317,7 +325,7 @@ namespace WireLink
         {
             if(clientSockets == null)
             {
-                clientSockets = new Dictionary<Guid, SocketHepler>();
+                return;
             }
 
             if(!clientSockets[clientGuid].isTerminated) { clientSockets[clientGuid].Terminate(); }
@@ -352,7 +360,7 @@ namespace WireLink
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
         private ServerType _serverType;
-        public ServerType ServerType
+        internal ServerType ServerType
         {
             get { return _serverType; }
         }
@@ -377,7 +385,7 @@ namespace WireLink
             
             Thread.Sleep(2);
 
-            mainLoop();
+            StartMainLoop();
             
             return 0;
         }
@@ -410,7 +418,7 @@ namespace WireLink
 
             if(!isConnected) { return 13; }
 
-            mainLoop();
+            StartMainLoop();
             
             return 0;
         }
