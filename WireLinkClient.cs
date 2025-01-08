@@ -1,5 +1,6 @@
 using System.Net;
 using ConsoleLogger;
+using MessagePack;
 
 namespace WireLink
 {
@@ -10,7 +11,7 @@ namespace WireLink
 
         // }
 
-        private DataConversionHelper dataConversionHelper = new DataConversionHelper();
+        //private DataConversionHelper dataConversionHelper = new DataConversionHelper();
 
         public const int defaultServerPort = 45707;
         public const int defaultClientPort = 45706;
@@ -99,28 +100,42 @@ namespace WireLink
             packetHandler.Stop();
         }
 
+        public bool Send(object data, System.Net.Sockets.ProtocolType protocolType)
+        {
+            try
+            {
+                byte[] bytes = MessagePackSerializer.Serialize(data);
+            }
+            catch
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         // data conversion
 
-        /// <summary>
-        /// add a conversion function to known conversions
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="toByteFunction">a function that takes a certain type and returns a byte</param>
-        /// <param name="fromByteFunction">a function that takes a byte and converts it into a certain type</param>
-        /// <param name="typeShorthand">a 4 chracter string that represents the type</param>
-        /// <returns>whether the function was succesfully added</returns>
-        public bool AddTypeConversion<T>(Func<T, byte[]> toByteFunction, Func<byte[], T> fromByteFunction, string typeShorthand) where T : notnull
-        {
-            return dataConversionHelper.AddTypeConversion(toByteFunction, fromByteFunction);
-        }
-        /// <summary>
-        /// removes a type conversion
-        /// </summary>
-        /// <param name="type">the type of conversion to remove</param>
-        /// <returns>whether the type was removed succesfully</returns>
-        public bool RemoveTypeConversion(Type type)
-        {
-            return dataConversionHelper.RemoveTypeConversion(type);
-        }
+        // /// <summary>
+        // /// add a conversion function to known conversions
+        // /// </summary>
+        // /// <typeparam name="T"></typeparam>
+        // /// <param name="toByteFunction">a function that takes a certain type and returns a byte</param>
+        // /// <param name="fromByteFunction">a function that takes a byte and converts it into a certain type</param>
+        // /// <param name="typeShorthand">a 4 chracter string that represents the type</param>
+        // /// <returns>whether the function was succesfully added</returns>
+        // public bool AddTypeConversion<T>(Func<T, byte[]> toByteFunction, Func<byte[], T> fromByteFunction, string typeShorthand) where T : notnull
+        // {
+        //     return dataConversionHelper.AddTypeConversion(toByteFunction, fromByteFunction);
+        // }
+        // /// <summary>
+        // /// removes a type conversion
+        // /// </summary>
+        // /// <param name="type">the type of conversion to remove</param>
+        // /// <returns>whether the type was removed succesfully</returns>
+        // public bool RemoveTypeConversion(Type type)
+        // {
+        //     return dataConversionHelper.RemoveTypeConversion(type);
+        // }
     }
 }
