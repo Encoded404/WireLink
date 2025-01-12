@@ -100,11 +100,13 @@ namespace WireLink
             packetHandler.Stop();
         }
 
-        public bool Send(object data, System.Net.Sockets.ProtocolType protocolType)
+        public bool Send<T>(int id, T data, System.Net.Sockets.ProtocolType protocolType)
         {
             try
             {
                 byte[] bytes = MessagePackSerializer.Serialize(data);
+                int dataType = DataConversionHelper.computeHash(typeof(T));
+                packetHandler.sendMessage(id, dataType, bytes);
             }
             catch
             {
@@ -112,6 +114,11 @@ namespace WireLink
             }
 
             return true;
+        }
+
+        public void AddReciever()
+        {
+            
         }
 
         // data conversion

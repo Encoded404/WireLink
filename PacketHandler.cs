@@ -10,6 +10,12 @@ namespace WireLink
         Client,
         Server,
     }
+    internal static class GuidCodes
+    {
+        public static readonly Guid All = Guid.NewGuid();
+        public static readonly Guid AllButOne = Guid.NewGuid();
+    }
+
     class unknownThreadException : Exception
     {
         public unknownThreadException() { }
@@ -22,7 +28,7 @@ namespace WireLink
         /// the main packetHandler intance
         /// </summary>
         public static PacketHandler instance = new PacketHandler();
-        SocketHepler mainSocket = new SocketHepler();
+        SocketHepler mainTcpSocket = new SocketHepler();
         Dictionary<Guid, SocketHepler>? clientSockets;
         List<Thread>? clientSockethreads;
         bool run = true;
@@ -54,8 +60,8 @@ namespace WireLink
 
         private bool ConnectToServer()
         {
-            mainSocket.Connect();
-            bool isVerified = mainSocket.verifyServerConnection();
+            mainTcpSocket.Connect();
+            bool isVerified = mainTcpSocket.verifyServerConnection();
 
             if(!isVerified) { Logger.WriteLine("couldn't verify server connection"); return false; }
 
@@ -93,6 +99,14 @@ namespace WireLink
         public List<Action> FixedUpdateCallBack = new List<Action>();
         int incementer = 0;
         Stopwatch heartBeatTimer = new Stopwatch();
+
+        // i dont know what this abomination is but it might just work
+        List<byte[]>? ClientSendQueue;
+        List<(Guid Client, byte[] message)>? ServerSendQueue;
+        List<(Guid[] Clients, byte[] message)>? ServerSendToManyQueue;
+        List<byte[]>? ServerSendToAllQueue;
+        List<(Guid exeption, byte[] message)>? ServerSendToAllButOneQueue;
+
         private void FixedUpdate(float deltaTime)
         {
             incementer++;
@@ -241,7 +255,7 @@ namespace WireLink
         private int acceptConnectionThread()
         {
             bool resultBuffer;
-            resultBuffer = mainSocket.Listen(mainServerListiningPort);
+            resultBuffer = mainTcpSocket.Listen(mainServerListiningPort);
             if(resultBuffer == false) { Logger.WriteLine("listen function ran into an error an has returned"); return 14; }
             int totalClientAcceptAttempts = 0;
             int failedAccepts = 0;
@@ -249,13 +263,13 @@ namespace WireLink
             {
                 //throws an eception if it failed to accept a connection too many times
                 if(failedAccepts >= 10) { throw new unknownThreadException("[acceptConnectionThread] ran into to many errors in a row and quit"); }
-                if(mainSocket.isTerminated) { Logger.WriteLine("[acceptConnectionThread] accept connection thread has shoudown"); return -1; }
+                if(mainTcpSocket.isTerminated) { Logger.WriteLine("[acceptConnectionThread] accept connection thread has shoudown"); return -1; }
                 
                 //accept the next connection
                 Socket? tempSocket = null;
                 try
                 {
-                    tempSocket = mainSocket.Accept();
+                    tempSocket = mainTcpSocket.Accept();
                 }
                 // socket was closed
                 catch (SocketException) { Logger.WriteLine("[acceptConnectionThread] accept socket was shutdown", true, 4); break; }
@@ -337,6 +351,11 @@ namespace WireLink
         {
             clientSockethreads = new List<Thread>();
             clientSockets = new Dictionary<Guid, SocketHepler>();
+            
+            ServerSendQueue = new List<(Guid Client, byte[] message)>();
+            ServerSendToAllQueue = new List<byte[]>();
+            ServerSendToAllButOneQueue = new List<(Guid exeption, byte[] message)>();
+            ServerSendToManyQueue = new List<(Guid[] Clients, byte[] message)>();
         }
 
         void sendHeartBeat()
@@ -347,6 +366,8 @@ namespace WireLink
                 socket.sendHeartBeat();
             }
         }
+
+        private bool isExeptionHAndlerAttached = false;
 
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
         // PPPP   U   U  BBBBB   L      III  CCCC       M   M  EEEEE  TTTTTTT  H   H  OOO   DDDD   SSSS
@@ -373,13 +394,17 @@ namespace WireLink
         {
             _serverType = ServerType.Server;
 
-            Logger.WriteLine("attaching exeptionhandler", true, 5);
-            AppDomain currentDomain = AppDomain.CurrentDomain;
-            currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+            if(!isExeptionHAndlerAttached)
+            {
+                Logger.WriteLine("attaching exeptionhandler", true);
+                AppDomain currentDomain = AppDomain.CurrentDomain;
+                currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+                isExeptionHAndlerAttached = true;
+            }
 
             initServerValues();
 
-            mainSocket = new SocketHepler(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp));
+            mainTcpSocket = new SocketHepler(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp));
 
             InitServerLoops();
             
@@ -404,15 +429,21 @@ namespace WireLink
 
             _serverType = ServerType.Client;
 
-            Logger.WriteLine("attaching exeptionhandler", true);
-            AppDomain currentDomain = AppDomain.CurrentDomain;
-            currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+            if(!isExeptionHAndlerAttached)
+            {
+                Logger.WriteLine("attaching exeptionhandler", true);
+                AppDomain currentDomain = AppDomain.CurrentDomain;
+                currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+                isExeptionHAndlerAttached = true;
+            }
+
+            ClientSendQueue = new List<byte[]>();
 
             InitClientLoops();
             
             Thread.Sleep(2);
 
-            mainSocket.Init(serverAdress);
+            mainTcpSocket.Init(serverAdress);
 
             bool isConnected = ConnectToServer();
 
@@ -433,7 +464,7 @@ namespace WireLink
             Logger.WriteLine("closing local socket");
 
             //terminate the listening socket
-            mainSocket.Terminate();
+            mainTcpSocket.Terminate();
             
             Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logger.WriteLine("TerminateClients completed", true); });
 
@@ -465,41 +496,52 @@ namespace WireLink
             }
         }
         /// <summary>
-        /// if ServerType is Client send a message to the server, if its a Server send it to all clients 
+        /// send a message to the server
         /// </summary>
+        /// <param name="messageId">a id that can be used to identify the recieving code</param>
+        /// <param name="dataType">a hash of the c# type that is sent</param>
         /// <param name="message">the byte message to send</param>
-        public void sendMessage(byte[] message)
+        public void sendMessage(long messageId, int dataType, byte[] message)
         {
-            
+            if(_serverType != ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessage when ServerType is Server"); }
         }
         /// <summary>
-        /// sends a message to a specefic client. returns without doing anything if ServerType is not server.
+        /// sends the message to all clients 
+        /// </summary>
+        /// <param name="message">the byte message to send</param>
+        public void sendMessageToAllClients(byte[] message)
+        {
+            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToAllClients when ServerType is Client"); }
+        }
+        /// <summary>
+        /// sends a message to a specefic client.
         /// </summary>
         /// <param name="message">the byte message to send</param>
         /// <param name="guid">the guid of the client the message should be send to</param>
-        public void sendMessage(byte[] message, Guid guid)
+        public void sendMessageToClients(byte[] message, Guid clientGuid)
         {
-            if(_serverType != ServerType.Server) { return; }
+            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
         }
 
         /// <summary>
-        /// sends a message to an array of client. returns without doing anything if ServerType is not server.
+        /// sends a message to an array of client.
         /// </summary>
         /// <param name="message">the byte message to send</param>
         /// <param name="guids">the guids of the clients to send the messages to</param>
-        public void sendMessage(byte[] message, Guid[] guids)
+        public void sendMessageToClients(byte[] message, Guid[] clientGuids)
         {
+            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
 
         }
 
         /// <summary>
-        /// sends a message to all but one client. returns without doing anything if ServerType is not server.
+        /// sends a message to all but one client.
         /// </summary>
         /// <param name="message">the byte message to send</param>
         /// <param name="guid">the guid of the client the message shouldt be send to</param>
-        public void sendMessageToAllButOne(byte[] message, Guid guid)
+        public void sendMessageToAllExeptClient(byte[] message, Guid clientGuid)
         {
-
+            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
         }
 
         void CleanUp(object sender, UnhandledExceptionEventArgs args)
@@ -539,7 +581,7 @@ namespace WireLink
 
         public void SendTerminate()
         {
-            mainSocket.SendTerminate();
+            mainTcpSocket.SendTerminate();
         }
     }
 }
