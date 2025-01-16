@@ -106,7 +106,7 @@ namespace WireLink
             {
                 byte[] bytes = MessagePackSerializer.Serialize(data);
                 int dataType = DataConversionHelper.computeHash(typeof(T));
-                packetHandler.sendMessage(id, dataType, bytes);
+                packetHandler.sendMessage(new NetworkData(id, dataType, bytes));
             }
             catch
             {

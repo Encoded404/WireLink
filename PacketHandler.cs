@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using ConsoleLogger;
+using MessagePack;
 
 namespace WireLink
 {
@@ -14,6 +15,23 @@ namespace WireLink
     {
         public static readonly Guid All = Guid.NewGuid();
         public static readonly Guid AllButOne = Guid.NewGuid();
+    }
+    [MessagePackObject(AllowPrivate = true)]
+    internal struct NetworkData
+    {
+        [Key(0)]
+        public long messageId;
+        [Key(1)]
+        public int dataType;
+        [Key(2)]
+        public byte[] message;
+
+        public NetworkData(long messageId, int dataType, byte[] message)
+        {
+            this.messageId = messageId;
+            this.dataType = dataType;
+            this.message = message;
+        }
     }
 
     class unknownThreadException : Exception
@@ -89,6 +107,13 @@ namespace WireLink
 
             return;
         }
+
+        //  fffff   i   x   x   eeeee   dddd        u   u   pppp
+        //  f            x x    e       d   d       u   u   p   p
+        //  fff     i     x     eee     d   d       u   u   pppp
+        //  f       i    x x    e       d   d       u   u   p
+        //  f       i   x   x   eeeee   dddd        uuuuu   p
+
         private void startFixedUpdate()
         {
             heartBeatTimer.Start();
@@ -100,12 +125,12 @@ namespace WireLink
         int incementer = 0;
         Stopwatch heartBeatTimer = new Stopwatch();
 
-        // i dont know what this abomination is but it might just work
-        List<byte[]>? ClientSendQueue;
-        List<(Guid Client, byte[] message)>? ServerSendQueue;
-        List<(Guid[] Clients, byte[] message)>? ServerSendToManyQueue;
-        List<byte[]>? ServerSendToAllQueue;
-        List<(Guid exeption, byte[] message)>? ServerSendToAllButOneQueue;
+        // i dont know what this abomination is, but it might just work
+        Queue<NetworkData>? ClientSendQueue;
+        Queue<(Guid Client, NetworkData)>? ServerSendQueue;
+        Queue<(Guid[] Clients, NetworkData)>? ServerSendToManyQueue;
+        Queue<NetworkData>? ServerSendToAllQueue;
+        Queue<(Guid exeption, NetworkData)>? ServerSendToAllButOneQueue;
 
         private void FixedUpdate(float deltaTime)
         {
@@ -116,7 +141,7 @@ namespace WireLink
                 //Logger.WriteLine("test", true);
             }
 
-            if(heartBeatTimer.ElapsedMilliseconds > 500 && ServerType == ServerType.Server)
+            if(heartBeatTimer.ElapsedMilliseconds > 500 && _serverType == ServerType.Server)
             {
                 heartBeatTimer.Restart();
                 sendHeartBeat();
@@ -352,10 +377,10 @@ namespace WireLink
             clientSockethreads = new List<Thread>();
             clientSockets = new Dictionary<Guid, SocketHepler>();
             
-            ServerSendQueue = new List<(Guid Client, byte[] message)>();
-            ServerSendToAllQueue = new List<byte[]>();
-            ServerSendToAllButOneQueue = new List<(Guid exeption, byte[] message)>();
-            ServerSendToManyQueue = new List<(Guid[] Clients, byte[] message)>();
+            ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
+            ServerSendToAllQueue = new Queue<NetworkData>();
+            ServerSendToAllButOneQueue = new Queue<(Guid exeption, NetworkData)>();
+            ServerSendToManyQueue = new Queue<(Guid[] Clients, NetworkData)>();
         }
 
         void sendHeartBeat()
@@ -380,8 +405,8 @@ namespace WireLink
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-        private ServerType _serverType;
-        internal ServerType ServerType
+        private ServerType? _serverType = null;
+        internal ServerType? CurrentServerType
         {
             get { return _serverType; }
         }
@@ -437,7 +462,7 @@ namespace WireLink
                 isExeptionHAndlerAttached = true;
             }
 
-            ClientSendQueue = new List<byte[]>();
+            ClientSendQueue = new Queue<NetworkData>();
 
             InitClientLoops();
             
@@ -501,26 +526,35 @@ namespace WireLink
         /// <param name="messageId">a id that can be used to identify the recieving code</param>
         /// <param name="dataType">a hash of the c# type that is sent</param>
         /// <param name="message">the byte message to send</param>
-        public void sendMessage(long messageId, int dataType, byte[] message)
+        public void sendMessage(NetworkData data)
         {
-            if(_serverType != ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessage when ServerType is Server"); }
+            if(_serverType == ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessage when ServerType is Server"); }
+            if(_serverType == null || ClientSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessage without initializing the server"); }
+
+            ClientSendQueue.Enqueue(data);
         }
         /// <summary>
-        /// sends the message to all clients 
+        /// sends the message to all clients
         /// </summary>
         /// <param name="message">the byte message to send</param>
-        public void sendMessageToAllClients(byte[] message)
+        public void sendMessageToAllClients(NetworkData data)
         {
-            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToAllClients when ServerType is Client"); }
+            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToAllClients when ServerType is Client"); }
+            if(_serverType == null || ServerSendToAllQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllClients without initializing the server"); }
+
+            ServerSendToAllQueue.Enqueue(data);
         }
         /// <summary>
         /// sends a message to a specefic client.
         /// </summary>
         /// <param name="message">the byte message to send</param>
         /// <param name="guid">the guid of the client the message should be send to</param>
-        public void sendMessageToClients(byte[] message, Guid clientGuid)
+        public void sendMessageToClient(Guid clientGuid, NetworkData data)
         {
-            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
+            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
+            if(_serverType == null || ServerSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToClient without initializing the server"); }
+
+            ServerSendQueue.Enqueue((clientGuid, data));
         }
 
         /// <summary>
@@ -528,10 +562,12 @@ namespace WireLink
         /// </summary>
         /// <param name="message">the byte message to send</param>
         /// <param name="guids">the guids of the clients to send the messages to</param>
-        public void sendMessageToClients(byte[] message, Guid[] clientGuids)
+        public void sendMessageToMultipleClients(Guid[] clientGuids, NetworkData data)
         {
-            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
-
+            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients when ServerType is Client"); }
+            if(_serverType == null || ServerSendToManyQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients without initializing the server"); }
+        
+            ServerSendToManyQueue.Enqueue((clientGuids, data));
         }
 
         /// <summary>
@@ -539,9 +575,12 @@ namespace WireLink
         /// </summary>
         /// <param name="message">the byte message to send</param>
         /// <param name="guid">the guid of the client the message shouldt be send to</param>
-        public void sendMessageToAllExeptClient(byte[] message, Guid clientGuid)
+        public void sendMessageToAllButOne(Guid clientGuid, NetworkData data)
         {
-            if(_serverType != ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
+            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne when ServerType is Client"); }
+            if(_serverType == null || ServerSendToAllButOneQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne without initializing the server"); }
+        
+            ServerSendToAllButOneQueue.Enqueue((clientGuid, data));
         }
 
         void CleanUp(object sender, UnhandledExceptionEventArgs args)
