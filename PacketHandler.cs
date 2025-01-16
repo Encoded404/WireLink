@@ -10,11 +10,7 @@ namespace WireLink
     {
         Client,
         Server,
-    }
-    internal static class GuidCodes
-    {
-        public static readonly Guid All = Guid.NewGuid();
-        public static readonly Guid AllButOne = Guid.NewGuid();
+        RelayServer,
     }
     [MessagePackObject(AllowPrivate = true)]
     internal struct NetworkData
@@ -33,13 +29,6 @@ namespace WireLink
             this.message = message;
         }
     }
-
-    class unknownThreadException : Exception
-    {
-        public unknownThreadException() { }
-        public unknownThreadException(string message)
-        : base(message) { }
-    }
     internal class PacketHandler
     {
         /// <summary>
@@ -47,7 +36,9 @@ namespace WireLink
         /// </summary>
         public static PacketHandler instance = new PacketHandler();
         SocketHepler mainTcpSocket = new SocketHepler();
-        Dictionary<Guid, SocketHepler>? clientSockets;
+        SocketHepler mainUdpSocket = new SocketHepler();
+        Dictionary<Guid, SocketHepler>? clientTcpSockets;
+        Dictionary<Guid, SocketHepler>? clientUdpSockets;
         List<Thread>? clientSockethreads;
         bool run = true;
 
@@ -108,11 +99,14 @@ namespace WireLink
             return;
         }
 
-        //  fffff   i   x   x   eeeee   dddd        u   u   pppp
-        //  f            x x    e       d   d       u   u   p   p
-        //  fff     i     x     eee     d   d       u   u   pppp
-        //  f       i    x x    e       d   d       u   u   p
-        //  f       i   x   x   eeeee   dddd        uuuuu   p
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+        //  fffff   i   x   x   eeeee   dddd        u   u   pppp    dddd      a     ttttt   eeeee
+        //  f            x x    e       d   d       u   u   p   p   d   d   a   a     t     e
+        //  fff     i     x     eee     d   d       u   u   pppp    d   d   aaaaa     t     eee
+        //  f       i    x x    e       d   d       u   u   p       d   d   a   a     t     e
+        //  f       i   x   x   eeeee   dddd        uuuuu   p       dddd    a   a     t     eeeee
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
         private void startFixedUpdate()
         {
@@ -141,7 +135,7 @@ namespace WireLink
                 //Logger.WriteLine("test", true);
             }
 
-            if(heartBeatTimer.ElapsedMilliseconds > 500 && _serverType == ServerType.Server)
+            if(heartBeatTimer.ElapsedMilliseconds > 500 && (_serverType == ServerType.Server || _serverType == ServerType.RelayServer))
             {
                 heartBeatTimer.Restart();
                 sendHeartBeat();
@@ -316,66 +310,84 @@ namespace WireLink
         }
         private void HandleNewConnection(Socket socket)
         {
-            if(clientSockets == null)
-            {
-                clientSockets = new Dictionary<Guid, SocketHepler>();
-            }
+            Logger.WriteLine("new connection attempt incomming", true, 5);
+            if(clientTcpSockets == null) { clientTcpSockets = new Dictionary<Guid, SocketHepler>(); }
+            if(clientUdpSockets == null) { clientUdpSockets = new Dictionary<Guid, SocketHepler>(); }
 
             Guid clientGuid = Guid.NewGuid();
 
             //initialize the socketHelper value
-            SocketHepler openClientSocket = new SocketHepler(socket, clientGuid);
+            SocketHepler openTcpClientSocket = new SocketHepler(socket, clientGuid);
+            SocketHepler openUdpClientSocket = new SocketHepler(socket, clientGuid);
 
-            Logger.WriteLine("attempting to verify connection");
-
-            // allow the client to start recieving
-            Thread.Sleep(10);
+            Logger.WriteLine("attempting to verify connection", true, 5);
 
             //test the connection with the new socket
-            if(!openClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid"); openClientSocket.Terminate(); return; }
+            if(!openTcpClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid", true, 5); openTcpClientSocket.Terminate(); return; }
+            if(!openUdpClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid", true, 5); openUdpClientSocket.Terminate(); return; }
 
-            Logger.WriteLine("connection verified");
+            Logger.WriteLine("connection verified", true, 5);
 
-            openClientSocket.terminateDeligate.Add(TerminateSingleClient);
+            openTcpClientSocket.terminateDeligate.Add(TerminateSingleClient);
+            openUdpClientSocket.terminateDeligate.Add(TerminateSingleClient);
 
             //add the socket to the list of clients
-            clientSockets.Add(clientGuid, openClientSocket);
+            clientTcpSockets.Add(clientGuid, openTcpClientSocket);
+            clientUdpSockets.Add(clientGuid, openUdpClientSocket);
 
             return;
         }
         private void TerminateClients()
         {
-            if(clientSockets == null)
+            Logger.WriteLine("starting termination of Clients", true);
+            if(clientTcpSockets != null)
             {
-                clientSockets = new Dictionary<Guid, SocketHepler>();
+                Guid[] TcpIds = clientTcpSockets.Keys.ToArray();
+
+                foreach(Guid id in TcpIds)
+                {
+                    TerminateSingleClient(id);
+                }
             }
 
-            Logger.WriteLine("starting termination of Clients", true);
-
-            Guid[] ids = clientSockets.Keys.ToArray();
-
-            foreach(Guid id in ids)
+            if(clientUdpSockets != null)
             {
-                TerminateSingleClient(id);
+                Guid[] UdpIds = clientUdpSockets.Keys.ToArray();
+
+                foreach(Guid id in UdpIds)
+                {
+                    TerminateSingleClient(id);
+                }
             }
         }
 
         private void TerminateSingleClient(Guid clientGuid)
         {
-            if(clientSockets == null)
+            bool WasAlreadyTerminatedCompletely = true;
+            if(clientTcpSockets != null && clientTcpSockets.ContainsKey(clientGuid))
             {
-                return;
+                if(!clientTcpSockets[clientGuid].isTerminated) { clientTcpSockets[clientGuid].Terminate(); }
+                clientTcpSockets.Remove(clientGuid);
+                WasAlreadyTerminatedCompletely = false;
             }
 
-            if(!clientSockets[clientGuid].isTerminated) { clientSockets[clientGuid].Terminate(); }
+            if(clientUdpSockets != null && clientUdpSockets.ContainsKey(clientGuid))
+            {
+                if(!clientUdpSockets[clientGuid].isTerminated) { clientUdpSockets[clientGuid].Terminate(); }
+                clientUdpSockets.Remove(clientGuid);
+                WasAlreadyTerminatedCompletely = false;
+            }
 
-            clientSockets.Remove(clientGuid);
-            Logger.WriteLine("client terminated", true, 4);
+            if(!WasAlreadyTerminatedCompletely)
+            {
+                Logger.WriteLine("client terminated", true, 4);
+            }
         }
         private void initServerValues()
         {
             clientSockethreads = new List<Thread>();
-            clientSockets = new Dictionary<Guid, SocketHepler>();
+            clientTcpSockets = new Dictionary<Guid, SocketHepler>();
+            clientUdpSockets = new Dictionary<Guid, SocketHepler>();
             
             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
             ServerSendToAllQueue = new Queue<NetworkData>();
@@ -385,8 +397,8 @@ namespace WireLink
 
         void sendHeartBeat()
         {
-            if(clientSockets == null) { throw new InvalidOperationException("clientSockets was null"); }
-            foreach(SocketHepler socket in clientSockets.Values)
+            if(clientUdpSockets == null) { throw new InvalidOperationException("clientSockets was null"); }
+            foreach(SocketHepler socket in clientUdpSockets.Values)
             {
                 socket.sendHeartBeat();
             }
@@ -398,7 +410,7 @@ namespace WireLink
         // PPPP   U   U  BBBBB   L      III  CCCC       M   M  EEEEE  TTTTTTT  H   H  OOO   DDDD   SSSS
         // p   p  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
         // P   P  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
-        // PPPP   U   U  BBBBB   L       I   C          M M M  EEEE      T     HHHH  O   O  D   D  SSS
+        // PPPP   U   U  BBBBB   L       I   C          M M M  EEEE      T     HHHH  O   O  D   D  SSS_serverType == null || 
         // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
         // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
         // P       UUU   BBBBB   LLLLL  III  CCCC       M   M  EEEEE     T     H   H  OOO   DDDD  SSSS
@@ -429,7 +441,8 @@ namespace WireLink
 
             initServerValues();
 
-            mainTcpSocket = new SocketHepler(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp));
+            mainTcpSocket = new SocketHepler(ProtocolType.Tcp);
+            mainUdpSocket = new SocketHepler(ProtocolType.Udp);
 
             InitServerLoops();
             
@@ -528,8 +541,8 @@ namespace WireLink
         /// <param name="message">the byte message to send</param>
         public void sendMessage(NetworkData data)
         {
-            if(_serverType == ServerType.Server) { throw new InvalidOperationException("you cannot call sendMessage when ServerType is Server"); }
-            if(_serverType == null || ClientSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessage without initializing the server"); }
+            if(_serverType != ServerType.Client) { throw new InvalidOperationException($"you cannot call sendMessage when ServerType is {_serverType}"); }
+            else if(ClientSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessage without initializing the server"); }
 
             ClientSendQueue.Enqueue(data);
         }
@@ -539,8 +552,8 @@ namespace WireLink
         /// <param name="message">the byte message to send</param>
         public void sendMessageToAllClients(NetworkData data)
         {
-            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToAllClients when ServerType is Client"); }
-            if(_serverType == null || ServerSendToAllQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllClients without initializing the server"); }
+            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToAllClients when ServerType is {_serverType}"); }
+            else if(ServerSendToAllQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllClients without initializing the server"); }
 
             ServerSendToAllQueue.Enqueue(data);
         }
@@ -551,8 +564,8 @@ namespace WireLink
         /// <param name="guid">the guid of the client the message should be send to</param>
         public void sendMessageToClient(Guid clientGuid, NetworkData data)
         {
-            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToClient when ServerType is Client"); }
-            if(_serverType == null || ServerSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToClient without initializing the server"); }
+            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToClient when ServerType is {_serverType}"); }
+            else if(ServerSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToClient without initializing the server"); }
 
             ServerSendQueue.Enqueue((clientGuid, data));
         }
@@ -564,8 +577,8 @@ namespace WireLink
         /// <param name="guids">the guids of the clients to send the messages to</param>
         public void sendMessageToMultipleClients(Guid[] clientGuids, NetworkData data)
         {
-            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients when ServerType is Client"); }
-            if(_serverType == null || ServerSendToManyQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients without initializing the server"); }
+            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToMultipleClients when ServerType is {_serverType}"); }
+            else if(ServerSendToManyQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients without initializing the server"); }
         
             ServerSendToManyQueue.Enqueue((clientGuids, data));
         }
@@ -577,8 +590,8 @@ namespace WireLink
         /// <param name="guid">the guid of the client the message shouldt be send to</param>
         public void sendMessageToAllButOne(Guid clientGuid, NetworkData data)
         {
-            if(_serverType == ServerType.Client) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne when ServerType is Client"); }
-            if(_serverType == null || ServerSendToAllButOneQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne without initializing the server"); }
+            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToAllButOne when ServerType is {_serverType}"); }
+            else if(ServerSendToAllButOneQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne without initializing the server"); }
         
             ServerSendToAllButOneQueue.Enqueue((clientGuid, data));
         }

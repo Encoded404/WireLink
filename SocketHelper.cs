@@ -36,27 +36,41 @@ namespace WireLink
         public List<Action<byte[]>> recieveDeligates = new List<Action<byte[]>>();
         Thread? recieveThread;
         bool isRecieving = false;
+        Guid? myGuid = null;
+        ProtocolType protocol;
         
         public SocketHepler()
         {
             
         }
-        public SocketHepler(Socket socket)
+        public SocketHepler(ProtocolType protocol = ProtocolType.Tcp)
+        {
+            Init(AddressFamily.InterNetwork, protocol);
+        }
+        public SocketHepler(Socket socket, ProtocolType protocol = ProtocolType.Tcp)
         {
             this.socket = socket;
             _isTerminated = false;
+            this.protocol = protocol;
         }
-        public SocketHepler(Socket socket, Guid guid)
+        public SocketHepler(Socket socket, Guid guid, ProtocolType protocol = ProtocolType.Tcp)
         {
             this.socket = socket;
             _isTerminated = false;
             myGuid = guid;
+            this.protocol = protocol;
         }
 
-        public bool Init(IPEndPoint remoteEndPoint)
+        public bool Init(IPEndPoint remoteEndPoint, ProtocolType protocol = ProtocolType.Tcp)
         {
             endPoint = remoteEndPoint;
-            socket = new Socket(remoteEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            return Init(remoteEndPoint.AddressFamily, protocol);
+        }
+        public bool Init(AddressFamily addressFamily, ProtocolType protocol = ProtocolType.Tcp)
+        {
+            this.protocol = protocol;
+
+            socket = new Socket(addressFamily, SocketType.Stream, this.protocol);
 
             _isTerminated = false;
 
@@ -89,7 +103,7 @@ namespace WireLink
         /// <returns></returns>
         public bool CreateAndListen(int port)
         {
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, protocol);
             return Listen(port);
         }
         public bool Listen(int port)
@@ -259,8 +273,6 @@ namespace WireLink
             }
             return true;
         }
-
-        Guid? myGuid = null;
 
         /// <summary>
         /// a deligate being called opun termination of the socket
