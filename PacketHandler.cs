@@ -108,11 +108,13 @@ namespace WireLink
             return;
         }
 
-        //  fffff   i   x   x   eeeee   dddd        u   u   pppp
-        //  f            x x    e       d   d       u   u   p   p
-        //  fff     i     x     eee     d   d       u   u   pppp
-        //  f       i    x x    e       d   d       u   u   p
-        //  f       i   x   x   eeeee   dddd        uuuuu   p
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+        //  fffff   i   x   x   eeeee   dddd        u   u   pppp    dddd        a     ttttttt eeeee
+        //  f            x x    e       d   d       u   u   p   p   d   d      a a       t    e
+        //  fff     i     x     eee     d   d       u   u   pppp    d   d     aaaaa      t    eee
+        //  f       i    x x    e       d   d       u   u   p       d   d    a     a     t    e
+        //  f       i   x   x   eeeee   dddd        uuuuu   p       dddd    a       a    t    eeeee
+        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
         private void startFixedUpdate()
         {
@@ -134,12 +136,12 @@ namespace WireLink
 
         private void FixedUpdate(float deltaTime)
         {
-            incementer++;
-            if(incementer > 10)
-            {
-                incementer = 0;
-                //Logger.WriteLine("test", true);
-            }
+            // incementer++;
+            // if(incementer > 10)
+            // {
+            //     incementer = 0;
+            //     //Logger.WriteLine("test", true);
+            // }
 
             if(heartBeatTimer.ElapsedMilliseconds > 500 && _serverType == ServerType.Server)
             {
@@ -385,10 +387,12 @@ namespace WireLink
 
         void sendHeartBeat()
         {
-            if(clientSockets == null) { throw new InvalidOperationException("clientSockets was null"); }
-            foreach(SocketHepler socket in clientSockets.Values)
+            if(clientSockets != null)
             {
-                socket.sendHeartBeat();
+                foreach(SocketHepler socket in clientSockets.Values)
+                {
+                    socket.sendHeartBeat();
+                }
             }
         }
 
@@ -404,6 +408,11 @@ namespace WireLink
         // P       UUU   BBBBB   LLLLL  III  CCCC       M   M  EEEEE     T     H   H  OOO   DDDD  SSSS
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+        /// <summary>
+        /// the time in ms between each heartbeat
+        /// </summary>
+        public float heartBeatInterval = 500;
 
         private ServerType? _serverType = null;
         internal ServerType? CurrentServerType
