@@ -38,6 +38,7 @@ namespace WireLink
         bool isRecieving = false;
         Guid? myGuid = null;
         ProtocolType protocol;
+        SocketType socketType;
         
         public SocketHepler()
         {
@@ -68,9 +69,19 @@ namespace WireLink
         }
         public bool Init(AddressFamily addressFamily, ProtocolType protocol = ProtocolType.Tcp)
         {
+            Logger.WriteLine("protocol is: "+protocol);
             this.protocol = protocol;
+            switch(protocol)
+            {
+                case ProtocolType.Tcp:
+                    this.socketType = SocketType.Stream;
+                    break;
+                case ProtocolType.Udp:
+                    this.socketType = SocketType.Dgram;
+                    break;
+            }
 
-            socket = new Socket(addressFamily, SocketType.Stream, this.protocol);
+            socket = new Socket(addressFamily, socketType, this.protocol);
 
             _isTerminated = false;
 
@@ -131,7 +142,7 @@ namespace WireLink
         public bool Send(byte[] data)
         {
             //return if the current socket is not defined
-            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; Logger.WriteLine("socket was invalid, returning."); return false; }
+            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; handleRemoteTerminate(); Logger.WriteLine($"socket {protocol} is invalid, returning."); return false; }
             //return if the current socket hasnt been validated
             if(!isConnectionValid) { Logger.WriteLine("connection isnt valid, returning."); return false; }
 
@@ -144,7 +155,7 @@ namespace WireLink
         private bool SendRaw(byte[] data)
         {
             //return if the current socket is not defined
-            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; handleRemoteTerminate(); Logger.WriteLine("[SendRaw] socket is invalid, returning."); return false; }
+            if(socket == null || _isTerminated || !socket.Connected) { _isTerminated = true; handleRemoteTerminate(); Logger.WriteLine($"[SendRaw] socket {protocol} is invalid, returning."); return false; }
             
             if(data.Length > byte.MaxValue) {  Logger.WriteLine("[SendRaw] data array is too large", true, 3); return false;}
 
@@ -416,6 +427,8 @@ namespace WireLink
 
             SendRaw((byte)byteCodes.connectionVerified);
 
+            Logger.WriteLine("[verifyClientConnection] client connection verified", false, 4);
+            
             isConnectionValid = true;
             return true;
         }

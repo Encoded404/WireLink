@@ -90,7 +90,7 @@ namespace WireLink
 
             packetHandler.StartClient(serverEndpoint);
 
-            Logger.WriteLine("test end 1");
+            Logger.WriteLine("connectToServer returned");
         }
         /// <summary>
         /// disconnects from the server

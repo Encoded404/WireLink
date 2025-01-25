@@ -74,7 +74,7 @@ namespace WireLink
 
             packetHandler.StartServer();
 
-            Logger.WriteLine("test end 1");
+            Logger.WriteLine("startServer returned");
         }
         /// <summary>
         /// disconnects from the server

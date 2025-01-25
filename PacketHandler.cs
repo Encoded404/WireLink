@@ -29,16 +29,101 @@ namespace WireLink
             this.message = message;
         }
     }
+    public struct TogglableSocketTypes
+    {
+        public bool Tcp;
+        public bool Udp;
+        public bool[] allProtocols
+        {
+            get
+            {
+                return [Tcp, Udp];
+            }
+        }
+
+        public TogglableSocketTypes()
+        {
+            Tcp = true;
+            Udp = true;
+        }
+
+        public int getProtocolId(ProtocolType socketType)
+        {
+            int index = -1;
+            switch (socketType)
+            {
+                case ProtocolType.Tcp:
+                    index = 0;
+                    break;
+                case ProtocolType.Udp:
+                    index = 1;
+                    break;
+                default:
+                    break;
+            }
+
+            int counter = 0;
+            int encounteredTrues = 0;
+
+            foreach (bool value in allProtocols)
+            {
+                if(counter == index && value)
+                {
+                    return encounteredTrues;
+                }
+
+                if(value)
+                {
+                    encounteredTrues++;
+                }
+
+                counter++;
+            }
+
+            return -1;
+        }
+
+        public bool isProtocolTypeToggled(ProtocolType protocolType)
+        {
+            switch (protocolType)
+            {
+                case ProtocolType.Tcp:
+                    return Tcp;
+                case ProtocolType.Udp:
+                    return Udp;
+            }
+            return false;
+        }
+    }
+    internal class ImmutableFlag
+    {
+        private bool _value = false;
+
+        public bool Value => _value;
+        
+        public void Set()
+        {
+            Set(true);
+        }
+        public void Set(bool value)
+        {
+            _value = value ? true : _value;
+        }
+
+        public static implicit operator bool(ImmutableFlag flag)
+        {
+            return flag._value;
+        }
+    }
     internal class PacketHandler
     {
         /// <summary>
         /// the main packetHandler intance
         /// </summary>
         public static PacketHandler instance = new PacketHandler();
-        SocketHepler mainTcpSocket = new SocketHepler();
-        SocketHepler mainUdpSocket = new SocketHepler();
-        Dictionary<Guid, SocketHepler>? clientTcpSockets;
-        Dictionary<Guid, SocketHepler>? clientUdpSockets;
+
+        List<SocketHepler> mainSockets = new List<SocketHepler>();
+        Dictionary<Guid, List<SocketHepler>>? clientSockets;
         List<Thread>? clientSockethreads;
         bool run = true;
 
@@ -69,12 +154,19 @@ namespace WireLink
 
         private bool ConnectToServer()
         {
-            mainTcpSocket.Connect();
-            bool isVerified = mainTcpSocket.verifyServerConnection();
-
-            if(!isVerified) { Logger.WriteLine("couldn't verify server connection"); return false; }
-
+            ImmutableFlag failedVerification = new ImmutableFlag();
+            if(socketTypes.Tcp)
+            {
+                mainSockets[0].Connect();
+                failedVerification.Set(!mainSockets[0].verifyServerConnection());
+            }
+            if(socketTypes.Udp)
+            {
+                mainSockets[1].Connect();
+                failedVerification.Set(!mainSockets[1].verifyServerConnection());
+            }
             
+            if(failedVerification) { Logger.WriteLine("couldn't verify server connection"); return false; }
 
             return true;
         }
@@ -273,9 +365,15 @@ namespace WireLink
         bool shouldAcceptConnectionThreadRun = true;
         private int acceptConnectionThread()
         {
-            bool resultBuffer;
-            resultBuffer = mainTcpSocket.Listen(mainServerListiningPort);
-            if(resultBuffer == false) { Logger.WriteLine("listen function ran into an error an has returned"); return 14; }
+            ImmutableFlag ecounteredError = new ImmutableFlag();
+            foreach(ProtocolType type in Enum.GetValues(typeof(ProtocolType))) 
+            {
+                if(socketTypes.isProtocolTypeToggled(type))
+                {
+                    ecounteredError.Set(mainSockets[socketTypes.getProtocolId(type)].Listen(mainServerListiningPort));
+                }
+            }
+            if(ecounteredError) { Logger.WriteLine("listen function ran into an error an has returned"); return 14; }
             int totalClientAcceptAttempts = 0;
             int failedAccepts = 0;
             while (shouldAcceptConnectionThreadRun)
@@ -311,8 +409,7 @@ namespace WireLink
         private void HandleNewConnection(Socket socket)
         {
             Logger.WriteLine("new connection attempt incomming", true, 5);
-            if(clientTcpSockets == null) { clientTcpSockets = new Dictionary<Guid, SocketHepler>(); }
-            if(clientUdpSockets == null) { clientUdpSockets = new Dictionary<Guid, SocketHepler>(); }
+            if(clientSockets == null) { clientSockets = new Dictionary<Guid, SocketHepler[]>(); }
 
             Guid clientGuid = Guid.NewGuid();
 
@@ -328,12 +425,11 @@ namespace WireLink
 
             Logger.WriteLine("connection verified", true, 5);
 
-            openTcpClientSocket.terminateDeligate.Add(TerminateSingleClient);
-            openUdpClientSocket.terminateDeligate.Add(TerminateSingleClient);
+            openTcpClientSocket.terminateDeligate.Add(TerminateSingleConnection);
+            openUdpClientSocket.terminateDeligate.Add(TerminateSingleConnection);
 
             //add the socket to the list of clients
-            clientTcpSockets.Add(clientGuid, openTcpClientSocket);
-            clientUdpSockets.Add(clientGuid, openUdpClientSocket);
+            clientSockets.Add(clientGuid, [openTcpClientSocket, openUdpClientSocket]);
 
             return;
         }
@@ -382,6 +478,36 @@ namespace WireLink
             {
                 Logger.WriteLine("client terminated", true, 4);
             }
+            else
+            {
+                Logger.WriteLine("client was already terminated", true, 4);
+            }
+        }
+        private void TerminateSingleConnection(Guid clientGuid)
+        {
+            bool WasAlreadyTerminatedCompletely = true;
+            if(clientTcpSockets != null && clientTcpSockets.ContainsKey(clientGuid))
+            {
+                if(!clientTcpSockets[clientGuid].isTerminated) { clientTcpSockets[clientGuid].Terminate(); }
+                clientTcpSockets.Remove(clientGuid);
+                WasAlreadyTerminatedCompletely = false;
+            }
+
+            if(clientUdpSockets != null && clientUdpSockets.ContainsKey(clientGuid))
+            {
+                if(!clientUdpSockets[clientGuid].isTerminated) { clientUdpSockets[clientGuid].Terminate(); }
+                clientUdpSockets.Remove(clientGuid);
+                WasAlreadyTerminatedCompletely = false;
+            }
+
+            if(!WasAlreadyTerminatedCompletely)
+            {
+                Logger.WriteLine("client terminated", true, 4);
+            }
+            else
+            {
+                Logger.WriteLine("client was already terminated", true, 4);
+            }
         }
         private void initServerValues()
         {
@@ -428,6 +554,8 @@ namespace WireLink
         // P       UUU   BBBBB   LLLLL  III  CCCC       M   M  EEEEE     T     H   H  OOO   DDDD  SSSS
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+        public TogglableSocketTypes socketTypes;
 
         /// <summary>
         /// the time in ms between each heartbeat
@@ -499,6 +627,7 @@ namespace WireLink
             Thread.Sleep(2);
 
             mainTcpSocket.Init(serverAdress);
+            mainUdpSocket.Init(serverAdress, ProtocolType.Udp);
 
             bool isConnected = ConnectToServer();
 
@@ -624,6 +753,7 @@ namespace WireLink
             try
             {
                 Logger.WriteLine("attemting cleanup");
+
                 Logger.ResetColor();
                 Console.TreatControlCAsInput = false;
 
