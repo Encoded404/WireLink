@@ -37,51 +37,31 @@ namespace WireLink
         Thread? recieveThread;
         bool isRecieving = false;
         Guid? myGuid = null;
-        ProtocolType protocol;
         SocketType socketType;
         
         public SocketHepler()
         {
-            
+            Init(AddressFamily.InterNetwork, ProtocolType.Udp);
         }
-        public SocketHepler(ProtocolType protocol = ProtocolType.Tcp)
-        {
-            Init(AddressFamily.InterNetwork, protocol);
-        }
-        public SocketHepler(Socket socket, ProtocolType protocol = ProtocolType.Tcp)
+        public SocketHepler(Socket socket)
         {
             this.socket = socket;
             _isTerminated = false;
-            this.protocol = protocol;
         }
-        public SocketHepler(Socket socket, Guid guid, ProtocolType protocol = ProtocolType.Tcp)
+        public SocketHepler(Socket socket, Guid guid)
         {
             this.socket = socket;
             _isTerminated = false;
             myGuid = guid;
-            this.protocol = protocol;
         }
-
-        public bool Init(IPEndPoint remoteEndPoint, ProtocolType protocol = ProtocolType.Tcp)
+        public bool Init(IPEndPoint remoteEndPoint)
         {
             endPoint = remoteEndPoint;
-            return Init(remoteEndPoint.AddressFamily, protocol);
+            return Init(remoteEndPoint.AddressFamily);
         }
-        public bool Init(AddressFamily addressFamily, ProtocolType protocol = ProtocolType.Tcp)
+        public bool Init(AddressFamily addressFamily)
         {
-            Logger.WriteLine("protocol is: "+protocol);
-            this.protocol = protocol;
-            switch(protocol)
-            {
-                case ProtocolType.Tcp:
-                    this.socketType = SocketType.Stream;
-                    break;
-                case ProtocolType.Udp:
-                    this.socketType = SocketType.Dgram;
-                    break;
-            }
-
-            socket = new Socket(addressFamily, socketType, this.protocol);
+            socket = new Socket(addressFamily, SocketType.Dgram, ProtocolType.Udp);
 
             _isTerminated = false;
 

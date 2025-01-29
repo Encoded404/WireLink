@@ -29,7 +29,7 @@ namespace WireLink
             this.message = message;
         }
     }
-    public struct TogglableSocketTypes
+    /* public struct TogglableSocketTypes
     {
         public bool Tcp;
         public bool Udp;
@@ -94,7 +94,7 @@ namespace WireLink
             }
             return false;
         }
-    }
+    } */
     internal class ImmutableFlag
     {
         private bool _value = false;
@@ -122,8 +122,7 @@ namespace WireLink
         /// </summary>
         public static PacketHandler instance = new PacketHandler();
 
-        List<SocketHepler> mainSockets = new List<SocketHepler>();
-        Dictionary<Guid, List<SocketHepler>>? clientSockets;
+        SocketHepler mainSocket = new SocketHepler();
         List<Thread>? clientSockethreads;
         bool run = true;
 
@@ -143,9 +142,7 @@ namespace WireLink
         // all private methods
         private void InitServerLoops()
         {
-            Logger.WriteLine("starting acceptConnectionLoop");
-            acceptConectionThread = new Thread(() => { acceptConnectionThread(); });
-            acceptConectionThread.Start();
+
         }
         private void InitClientLoops()
         {
@@ -155,16 +152,8 @@ namespace WireLink
         private bool ConnectToServer()
         {
             ImmutableFlag failedVerification = new ImmutableFlag();
-            if(socketTypes.Tcp)
-            {
-                mainSockets[0].Connect();
-                failedVerification.Set(!mainSockets[0].verifyServerConnection());
-            }
-            if(socketTypes.Udp)
-            {
-                mainSockets[1].Connect();
-                failedVerification.Set(!mainSockets[1].verifyServerConnection());
-            }
+            mainSocket.Connect();
+            failedVerification.Set(!mainSocket.verifyServerConnection());
             
             if(failedVerification) { Logger.WriteLine("couldn't verify server connection"); return false; }
 
@@ -363,157 +352,23 @@ namespace WireLink
             return true;
         }
         bool shouldAcceptConnectionThreadRun = true;
-        private int acceptConnectionThread()
-        {
-            ImmutableFlag ecounteredError = new ImmutableFlag();
-            foreach(ProtocolType type in Enum.GetValues(typeof(ProtocolType))) 
-            {
-                if(socketTypes.isProtocolTypeToggled(type))
-                {
-                    ecounteredError.Set(mainSockets[socketTypes.getProtocolId(type)].Listen(mainServerListiningPort));
-                }
-            }
-            if(ecounteredError) { Logger.WriteLine("listen function ran into an error an has returned"); return 14; }
-            int totalClientAcceptAttempts = 0;
-            int failedAccepts = 0;
-            while (shouldAcceptConnectionThreadRun)
-            {
-                //throws an eception if it failed to accept a connection too many times
-                if(failedAccepts >= 10) { throw new unknownThreadException("[acceptConnectionThread] ran into to many errors in a row and quit"); }
-                if(mainTcpSocket.isTerminated) { Logger.WriteLine("[acceptConnectionThread] accept connection thread has shoudown"); return -1; }
-                
-                //accept the next connection
-                Socket? tempSocket = null;
-                try
-                {
-                    tempSocket = mainTcpSocket.Accept();
-                }
-                // socket was closed
-                catch (SocketException) { Logger.WriteLine("[acceptConnectionThread] accept socket was shutdown", true, 4); break; }
-                
-                //if the connection is invalid, increase failedAccept value
-                if( tempSocket == null || !isConnectionValid(tempSocket) ) { failedAccepts++; continue; }
-
-                // reset and increment values
-                failedAccepts = 0;
-                totalClientAcceptAttempts += 1;
-
-                // log
- 
-                // handles the new socket
-                Task handleNewConnectionTask = Task.Run(() => {HandleNewConnection(tempSocket); });
-                Logger.WriteLine($"[acceptConnectionThread] accepted {totalClientAcceptAttempts} clients so far!", true, 3);
-            }
-            return 0;
-        }
-        private void HandleNewConnection(Socket socket)
-        {
-            Logger.WriteLine("new connection attempt incomming", true, 5);
-            if(clientSockets == null) { clientSockets = new Dictionary<Guid, SocketHepler[]>(); }
-
-            Guid clientGuid = Guid.NewGuid();
-
-            //initialize the socketHelper value
-            SocketHepler openTcpClientSocket = new SocketHepler(socket, clientGuid);
-            SocketHepler openUdpClientSocket = new SocketHepler(socket, clientGuid);
-
-            Logger.WriteLine("attempting to verify connection", true, 5);
-
-            //test the connection with the new socket
-            if(!openTcpClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid", true, 5); openTcpClientSocket.Terminate(); return; }
-            if(!openUdpClientSocket.verifyClientConnection()) { Logger.WriteLine("connection is invalid", true, 5); openUdpClientSocket.Terminate(); return; }
-
-            Logger.WriteLine("connection verified", true, 5);
-
-            openTcpClientSocket.terminateDeligate.Add(TerminateSingleConnection);
-            openUdpClientSocket.terminateDeligate.Add(TerminateSingleConnection);
-
-            //add the socket to the list of clients
-            clientSockets.Add(clientGuid, [openTcpClientSocket, openUdpClientSocket]);
-
-            return;
-        }
         private void TerminateClients()
         {
-            Logger.WriteLine("starting termination of Clients", true);
-            if(clientTcpSockets != null)
-            {
-                Guid[] TcpIds = clientTcpSockets.Keys.ToArray();
-
-                foreach(Guid id in TcpIds)
-                {
-                    TerminateSingleClient(id);
-                }
-            }
-
-            if(clientUdpSockets != null)
-            {
-                Guid[] UdpIds = clientUdpSockets.Keys.ToArray();
-
-                foreach(Guid id in UdpIds)
-                {
-                    TerminateSingleClient(id);
-                }
-            }
+            throw new NotImplementedException();
         }
 
         private void TerminateSingleClient(Guid clientGuid)
         {
-            bool WasAlreadyTerminatedCompletely = true;
-            if(clientTcpSockets != null && clientTcpSockets.ContainsKey(clientGuid))
-            {
-                if(!clientTcpSockets[clientGuid].isTerminated) { clientTcpSockets[clientGuid].Terminate(); }
-                clientTcpSockets.Remove(clientGuid);
-                WasAlreadyTerminatedCompletely = false;
-            }
-
-            if(clientUdpSockets != null && clientUdpSockets.ContainsKey(clientGuid))
-            {
-                if(!clientUdpSockets[clientGuid].isTerminated) { clientUdpSockets[clientGuid].Terminate(); }
-                clientUdpSockets.Remove(clientGuid);
-                WasAlreadyTerminatedCompletely = false;
-            }
-
-            if(!WasAlreadyTerminatedCompletely)
-            {
-                Logger.WriteLine("client terminated", true, 4);
-            }
-            else
-            {
-                Logger.WriteLine("client was already terminated", true, 4);
-            }
+            throw new NotImplementedException();
         }
         private void TerminateSingleConnection(Guid clientGuid)
         {
-            bool WasAlreadyTerminatedCompletely = true;
-            if(clientTcpSockets != null && clientTcpSockets.ContainsKey(clientGuid))
-            {
-                if(!clientTcpSockets[clientGuid].isTerminated) { clientTcpSockets[clientGuid].Terminate(); }
-                clientTcpSockets.Remove(clientGuid);
-                WasAlreadyTerminatedCompletely = false;
-            }
-
-            if(clientUdpSockets != null && clientUdpSockets.ContainsKey(clientGuid))
-            {
-                if(!clientUdpSockets[clientGuid].isTerminated) { clientUdpSockets[clientGuid].Terminate(); }
-                clientUdpSockets.Remove(clientGuid);
-                WasAlreadyTerminatedCompletely = false;
-            }
-
-            if(!WasAlreadyTerminatedCompletely)
-            {
-                Logger.WriteLine("client terminated", true, 4);
-            }
-            else
-            {
-                Logger.WriteLine("client was already terminated", true, 4);
-            }
+            throw new NotImplementedException();
         }
         private void initServerValues()
         {
             clientSockethreads = new List<Thread>();
-            clientTcpSockets = new Dictionary<Guid, SocketHepler>();
-            clientUdpSockets = new Dictionary<Guid, SocketHepler>();
+            mainSocket = new SocketHepler();
             
             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
             ServerSendToAllQueue = new Queue<NetworkData>();
@@ -523,23 +378,7 @@ namespace WireLink
 
         void sendHeartBeat()
         {
-            if(_serverType == ServerType.Server || _serverType == ServerType.RelayServer)
-            {
-                if(clientTcpSockets != null)
-                {
-                    foreach(SocketHepler socket in clientTcpSockets.Values)
-                    {
-                        socket.sendHeartBeat();
-                    }
-                }
-                if(clientUdpSockets != null)
-                {
-                    foreach(SocketHepler socket in clientUdpSockets.Values)
-                    {
-                        socket.sendHeartBeat();
-                    }
-                }
-            }
+            throw new NotImplementedException();
         }
 
         private bool isExeptionHAndlerAttached = false;
@@ -555,7 +394,6 @@ namespace WireLink
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-        public TogglableSocketTypes socketTypes;
 
         /// <summary>
         /// the time in ms between each heartbeat
@@ -586,8 +424,7 @@ namespace WireLink
 
             initServerValues();
 
-            mainTcpSocket = new SocketHepler(ProtocolType.Tcp);
-            mainUdpSocket = new SocketHepler(ProtocolType.Udp);
+            mainSocket = new SocketHepler();
 
             InitServerLoops();
             
@@ -627,6 +464,7 @@ namespace WireLink
             Thread.Sleep(2);
 
             mainTcpSocket.Init(serverAdress);
+            /// Feeeeeedest, min far er den bedste, og jeg skal til at få slumre af min pc til at virke! ellers kan det være at min far hacker noget mere kode 8@)
             mainUdpSocket.Init(serverAdress, ProtocolType.Udp);
 
             bool isConnected = ConnectToServer();
