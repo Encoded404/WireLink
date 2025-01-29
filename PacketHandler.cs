@@ -463,9 +463,7 @@ namespace WireLink
             
             Thread.Sleep(2);
 
-            mainTcpSocket.Init(serverAdress);
-            /// Feeeeeedest, min far er den bedste, og jeg skal til at få slumre af min pc til at virke! ellers kan det være at min far hacker noget mere kode 8@)
-            mainUdpSocket.Init(serverAdress, ProtocolType.Udp);
+            mainSocket.Init(serverAdress);
 
             bool isConnected = ConnectToServer();
 
@@ -482,17 +480,14 @@ namespace WireLink
             // it is being done in handleLoopExits but is included here for completenes
             shouldAcceptConnectionThreadRun = false;
 
-
-            Logger.WriteLine("closing local socket");
-
-            //terminate the listening socket
-            mainTcpSocket.Terminate();
-            
+            Logger.WriteLine("terminating clients", true, 3);
             Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logger.WriteLine("TerminateClients completed", true); });
-
             terminateClients.Wait();
 
-            Logger.WriteLine("Stop Function returning", true);
+            Logger.WriteLine("closing local socket", true);
+            mainSocket.Terminate();
+
+            Logger.WriteLine("Stop Function returning", true, 4);
             return;
         }
         public void Restart()
@@ -614,11 +609,6 @@ namespace WireLink
                 }
             }
             Console.Out.Flush();
-        }
-
-        public void SendTerminate()
-        {
-            mainTcpSocket.SendTerminate();
         }
     }
 }
