@@ -111,7 +111,7 @@ namespace WireLink
 
             return true;
         } */
-        public Socket? Accept()
+        /* public Socket? Accept()
         {
             //return if the current socket is not defined
             if(socket == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("[accept] socket was null, returning. (acceptCall)"); return null; }
@@ -120,7 +120,7 @@ namespace WireLink
             Socket returnValue = socket.Accept();
             Logger.WriteLine("[accept] connection accepted");
             return returnValue;
-        }
+        } */
         public bool Send(byte[] data)
         {
             //return if the current socket is not defined
