@@ -29,72 +29,6 @@ namespace WireLink
             this.message = message;
         }
     }
-    /* public struct TogglableSocketTypes
-    {
-        public bool Tcp;
-        public bool Udp;
-        public bool[] allProtocols
-        {
-            get
-            {
-                return [Tcp, Udp];
-            }
-        }
-
-        public TogglableSocketTypes()
-        {
-            Tcp = true;
-            Udp = true;
-        }
-
-        public int getProtocolId(ProtocolType socketType)
-        {
-            int index = -1;
-            switch (socketType)
-            {
-                case ProtocolType.Tcp:
-                    index = 0;
-                    break;
-                case ProtocolType.Udp:
-                    index = 1;
-                    break;
-                default:
-                    break;
-            }
-
-            int counter = 0;
-            int encounteredTrues = 0;
-
-            foreach (bool value in allProtocols)
-            {
-                if(counter == index && value)
-                {
-                    return encounteredTrues;
-                }
-
-                if(value)
-                {
-                    encounteredTrues++;
-                }
-
-                counter++;
-            }
-
-            return -1;
-        }
-
-        public bool isProtocolTypeToggled(ProtocolType protocolType)
-        {
-            switch (protocolType)
-            {
-                case ProtocolType.Tcp:
-                    return Tcp;
-                case ProtocolType.Udp:
-                    return Udp;
-            }
-            return false;
-        }
-    } */
     internal class ImmutableFlag
     {
         private bool _value = false;
@@ -115,22 +49,28 @@ namespace WireLink
             return flag._value;
         }
     }
-    internal class PacketHandler
+    internal class InternalNetworkingEngine
     {
+        public InternalNetworkingEngine()
+        {
+            mainSocket = new SocketHelper(this);
+        }
         /// <summary>
         /// the main packetHandler intance
         /// </summary>
-        public static PacketHandler instance = new PacketHandler();
+        public static InternalNetworkingEngine instance = new InternalNetworkingEngine();
 
-        SocketHepler mainSocket = new SocketHepler();
+        public MessageHandler messageHandler = new MessageHandler();
+
+        SocketHelper mainSocket;
         List<Thread>? clientSockethreads;
         bool run = true;
 
         /// <summary>
         /// the main port for the server, ie the port the server listens for clients on
         /// </summary>
-        public int mainServerListiningPort = 45707;
-        public int mainClientListiningPort = 45706;
+        public int mainServerPort = 45707;
+        public int mainClientPort = 45706;
 
         /// <summary>
         /// the target updates per second of the main loop, which is responsible for packets, dataCompression, connections, etc
@@ -152,7 +92,8 @@ namespace WireLink
         private bool ConnectToServer()
         {
             ImmutableFlag failedVerification = new ImmutableFlag();
-            mainSocket.Connect();
+            mainSocket.setDefaultRemoteHost();
+
             failedVerification.Set(!mainSocket.verifyServerConnection());
             
             if(failedVerification) { Logger.WriteLine("couldn't verify server connection"); return false; }
@@ -368,7 +309,7 @@ namespace WireLink
         private void initServerValues()
         {
             clientSockethreads = new List<Thread>();
-            mainSocket = new SocketHepler();
+            mainSocket = new SocketHelper(this);
             
             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
             ServerSendToAllQueue = new Queue<NetworkData>();
@@ -424,7 +365,7 @@ namespace WireLink
 
             initServerValues();
 
-            mainSocket = new SocketHepler();
+            mainSocket = new SocketHelper(this);
 
             InitServerLoops();
             
