@@ -19,7 +19,7 @@ namespace WireLink
         public int serverPort = defaultServerPort;
         public int clientPort = defaultClientPort;
 
-        PacketHandler packetHandler = new PacketHandler();
+        InternalNetworkingEngine packetHandler = new InternalNetworkingEngine();
 
         IPEndPoint serverEndpoint = new IPEndPoint(IPAddress.Loopback, 0);
 
@@ -84,7 +84,7 @@ namespace WireLink
                 port = defaultServerPort;
             }
 
-            serverEndpoint = TryParseEndpoint(host, port) ?? PacketHandler.emptyIPEndPoint;
+            serverEndpoint = TryParseEndpoint(host, port) ?? InternalNetworkingEngine.emptyIPEndPoint;
 
             serverPort = port;
 
@@ -100,7 +100,7 @@ namespace WireLink
             packetHandler.Stop();
         }
 
-        public bool Send<T>(int id, T data, System.Net.Sockets.ProtocolType protocolType)
+        public bool Send<T>(int id, T data)
         {
             try
             {
