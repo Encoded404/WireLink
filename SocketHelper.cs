@@ -19,10 +19,12 @@ namespace WireLink
         heartBeat
     }
 
-    internal class SocketHepler
+    internal class SocketHelper
     {
         private Socket? socket = null;
+        InternalNetworkingEngine engine;
         bool _isTerminated = true;
+        bool _isConnected = false;
         public bool isTerminated
         {
             get { return _isTerminated; }
@@ -32,27 +34,77 @@ namespace WireLink
             get { return socket; }
         }
         IPEndPoint? endPoint;
-
-        public List<Action<byte[]>> recieveDeligates = new List<Action<byte[]>>();
+        int port;
         Thread? recieveThread;
         bool isRecieving = false;
         Guid? myGuid = null;
         SocketType socketType;
         
-        public SocketHepler()
+        public SocketHelper()
         {
             Init(AddressFamily.InterNetwork);
+            engine = InternalNetworkingEngine.instance;
         }
-        public SocketHepler(Socket socket)
+        public SocketHelper(InternalNetworkingEngine engine, int port = 0)
+        {
+            Init(AddressFamily.InterNetwork);
+            this.engine = engine;
+            
+            if(port == 0)
+            {
+                this.port = InternalNetworkingEngine.instance.mainClientPort;
+            }
+            else
+            {
+                this.port = port;
+            }
+        }
+        public SocketHelper(Socket socket, InternalNetworkingEngine? engine = null, int port = 0)
         {
             this.socket = socket;
             _isTerminated = false;
+
+            if(engine == null)
+            {
+                this.engine = InternalNetworkingEngine.instance;
+            }
+            else
+            {
+                this.engine = engine;
+            }
+            
+            if(port == 0)
+            {
+                this.port = InternalNetworkingEngine.instance.mainClientPort;
+            }
+            else
+            {
+                this.port = port;
+            }
         }
-        public SocketHepler(Socket socket, Guid guid)
+        public SocketHelper(Socket socket, Guid guid, InternalNetworkingEngine? engine = null, int port = 0)
         {
             this.socket = socket;
             _isTerminated = false;
             myGuid = guid;
+
+            if(engine == null)
+            {
+                this.engine = InternalNetworkingEngine.instance;
+            }
+            else
+            {
+                this.engine = engine;
+            }
+
+            if(port == 0)
+            {
+                this.port = InternalNetworkingEngine.instance.mainClientPort;
+            }
+            else
+            {
+                this.port = port;
+            }
         }
         public bool Init(IPEndPoint remoteEndPoint)
         {
@@ -80,47 +132,14 @@ namespace WireLink
             return true;
         }
 
-        /* public bool Connect()
+        public bool setDefaultRemoteHost()
         {
             if (socket == null || endPoint == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("socket or endpoint was invalid, returning."); return false; }
 
             socket.Connect(endPoint);
 
             return true;
-        } */
-
-        /// <summary>
-        /// initializes the socket and sets t in a listening state
-        /// </summary>
-        /// <param name="port"></param>
-        /// <returns></returns>
-        /* public bool CreateAndListen(int port)
-        {
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Udp);
-            return Listen(port);
-        } */
-        /* public bool Listen(int port)
-        {
-            if(socket == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("[Listen] socket was invalid, returning."); return false; }
-
-            IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
-            socket.Bind(ep);
-
-            Logger.WriteLine("[Listen] listining port created and opened");
-            socket.Listen();
-
-            return true;
-        } */
-        /* public Socket? Accept()
-        {
-            //return if the current socket is not defined
-            if(socket == null || _isTerminated) { _isTerminated = true; Logger.WriteLine("[accept] socket was null, returning. (acceptCall)"); return null; }
-            
-            Logger.WriteLine($"[accept] ready to accept a new client.");
-            Socket returnValue = socket.Accept();
-            Logger.WriteLine("[accept] connection accepted");
-            return returnValue;
-        } */
+        }
         public bool Send(byte[] data)
         {
             //return if the current socket is not defined
@@ -140,11 +159,8 @@ namespace WireLink
             if(socket == null || _isTerminated) { _isTerminated = true; Terminate(); Logger.WriteLine($"[SendRaw] socket is invalid, returning."); return false; }
             if(!socket.Connected) { _isTerminated = true; handleRemoteTerminate(); Logger.WriteLine($"[SendRaw] socket was terminated remotly, returning."); return false; }
             
-            if(data.Length > byte.MaxValue) {  Logger.WriteLine("[SendRaw] data array is too large", true, 3); return false;}
-
             try
             {
-                socket.Send([(byte)data.Length]);
                 socket.Send(data);
             }
             catch(SocketException ex)
@@ -172,14 +188,14 @@ namespace WireLink
         {
             return StartRecieve();
         }
-        public bool AddReciever(Action<byte[]> functionCallback)
+        /* public bool AddReciever(Action<byte[]> functionCallback)
         {
-            if(!StartRecieve()) { return false; } 
+            if(isRecieving) { return false; } 
 
-            recieveDeligates.Add(functionCallback);
+            receiveDelegates.Add(functionCallback);
 
             return true;
-        }
+        } */
         private bool StartRecieve()
         {
             //return if the current socket is not defined
@@ -195,29 +211,44 @@ namespace WireLink
         {
             isRecieving = false;
             Logger.WriteLine("stopped recieving", true, 5);
+
             return true;
         }
+        List<Task> tasks = new List<Task>();
         bool RecieveFunc()
         {
             Logger.WriteLine("[recieveFunc] starting recievefunc", true, 5);
             while(isRecieving)
             {
-                byte[] buffer = new byte[1];
-                bool hasRecievedData = false;
+                byte[] buffer = new byte[1024];
+                EndPoint endPoint = new IPEndPoint(IPAddress.Any, port);
                 if(socket != null)
                 {
                     try
                     {
-                        Logger.WriteLine($"[recieveFunc] socket blocking: {socket.Blocking} isterminated: {_isTerminated} is connected: {socket.Connected}", true, 7);
-                        socket.Receive(buffer, buffer.Length, 0);
-                        if(_isTerminated || !socket.Connected) { return false; }
-                        short bufferSize = buffer[0];
-                        if(bufferSize <= 0) { continue; }
-                        Logger.WriteLine("[recieveFunc] bufferSize is: "+bufferSize, true, 6);
-                        buffer = new byte[bufferSize];
-                        socket.Receive(buffer, bufferSize, 0);
-                        hasRecievedData = true;
+                        Logger.WriteLine($"[recieveFunc] receiving: socket blocking: {socket.Blocking} isterminated: {_isTerminated} is connected: {socket.Connected}", true, 7);
+                        
+                        int dataRecieved = 0;
+                        if(_isConnected)
+                        {
+                            // recieves the data from the remote client/server
+                            dataRecieved = socket.Receive(buffer);
+                        }
+                        else
+                        {
+                            // recieves the data from any remote client/server
+                            dataRecieved = socket.ReceiveFrom(buffer, ref endPoint);
+                        }
                         Logger.WriteLine("[recieveFunc] data recieved", true, 6);
+
+                        // resize the array to fit the data 
+                        byte[] tempBuffer = new byte[dataRecieved];
+
+                        for(int i = 0; i < dataRecieved; i++)
+                        {
+                            tempBuffer[i] = buffer[i];
+                        }
+                        buffer = tempBuffer;
                     }
                     catch (ObjectDisposedException e)
                     {
@@ -241,8 +272,6 @@ namespace WireLink
                     }
                 }
                 else { return false; }
-                //check if buffer recieved any data
-                if(!hasRecievedData) { continue;}
 
                 bool shouldCallDeligates = true;
                 switch (buffer[0])
@@ -256,14 +285,16 @@ namespace WireLink
                         handleRemoteTerminate();
                         shouldCallDeligates = false;
                         break;
+                    case (byte)byteCodes.verifyConnection:
+                    case (byte)byteCodes.connectionVerified:
+                        Logger.WriteLine("received verification message");
+                        verifyClientConnectionCallback(buffer, endPoint);
+                        shouldCallDeligates = false;
+                        break;
                 }
                 if(!shouldCallDeligates) { continue; }
 
                 Logger.WriteLine("[recieveFunc] recieved data and invoking callbacks", true, 5);
-                foreach (Action<byte[]> func in recieveDeligates)
-                {
-                    func.Invoke(buffer);
-                }
             }
             return true;
         }
@@ -366,14 +397,17 @@ namespace WireLink
             SendRaw((byte)byteCodes.terminateConnection);
         }
         bool isConnectionValid = false;
+
         Random randomIdGenerator = new Random();
+        bool _isTryingToVerify = false;
+        List<Action<byte[]>> verifyDelegates = new List<Action<byte[]>>();
         /// <summary>
         /// verifies the connection of the sockethelper to a client
         /// </summary>
         /// <param name="timeoutTime">the timeout time in millseconds, set to 0 to disable timeout</param>
         /// <param name="retries">the retries it has to verify the connection, a value between 0 and 255</param>
         /// <returns></returns>
-        public bool verifyClientConnection(uint timeoutTime = 1500, byte retries = 3)
+        public bool verifyServerConnection(uint timeoutTime = 1500, byte retries = 3)
         {
             byte[] randomId = new byte[4];
             randomIdGenerator.NextBytes(randomId);
@@ -381,20 +415,20 @@ namespace WireLink
             Logger.WriteLine("[verifyClientConnection] verifing client connection", false, 4);
             
             bool? verified = null;
+            _isTryingToVerify = true;
 
-            //sets the id of our deligate to the position it will occupy
-            int deligateId = recieveDeligates.Count;
+            int delegateId = verifyDelegates.Count;
             //add a function the check if the connection is valid
-            recieveDeligates.Add((byte[] bytes) => { verified = verifySingleClientConnection(bytes, randomId, ref retries); });
+            verifyDelegates.Add(bytes => { verified = verifyServerConnectionCallback(bytes, randomId, ref retries); });
             
             if(!isRecieving)
             {
                 if(!StartRecieve()) { return false; }
             }
             
-            Logger.WriteLine("[verifyClientConnection] sending verify request", false, 5);
+            Logger.WriteLine("[verifyServerConnection] sending verify request", false, 5);
             SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]);
-            Logger.WriteLine("[verifyClientConnection] verify request sent", false, 5);
+            Logger.WriteLine("[verifyServerConnection] verify request sent", false, 5);
             
             Stopwatch timeout = Stopwatch.StartNew();
             //checks whether the connection has returned, or the timeout has ran out
@@ -403,31 +437,31 @@ namespace WireLink
                 Thread.Sleep(25);
             }
             timeout.Stop();
-            recieveDeligates.RemoveAt(deligateId);
+            receiveDelegates.RemoveAt(deligateId);
 
-            if(timeout.ElapsedMilliseconds >= timeoutTime) { Logger.WriteLine("[verifyClientConnection] could not verify server connection, connection timed out"); isConnectionValid = false; return false; }
-            if(retries <= 0) { Logger.WriteLine("[verifyClientConnection] could not verify server connection, couldnt reach or recognize the client"); isConnectionValid = false; return false; }
+            if(timeout.ElapsedMilliseconds >= timeoutTime) { Logger.WriteLine("[verifyServerConnection] could not verify server connection, connection timed out"); isConnectionValid = false; return false; }
+            if(retries <= 0) { Logger.WriteLine("[verifyServerConnection] could not verify server connection, couldnt reach or recognize the client"); isConnectionValid = false; return false; }
 
             SendRaw((byte)byteCodes.connectionVerified);
 
-            Logger.WriteLine("[verifyClientConnection] client connection verified", false, 4);
+            Logger.WriteLine("[verifyServerConnection] client connection verified", false, 4);
             
             isConnectionValid = true;
             return true;
         }
-        private bool? verifySingleClientConnection(byte[] bytes, byte[] randomId, ref byte triesLeft)
+        private bool? verifyServerConnectionCallback(byte[] bytes, byte[] randomId, ref byte triesLeft)
         {
             //if no more retries are left return with a failed connection.
             if(triesLeft <= 0) { SendRaw((byte)byteCodes.terminateConnection); return false; }
             
-            Logger.WriteLine("[verifySingleClientConnection] recieved verification response", true, 5);
+            Logger.WriteLine("[verifyServerConnectionCallback] recieved verification response", true, 5);
 
             //if the recieved data is the wrong size, retry.
             if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]); triesLeft--; return null; }
 
             if(bytes[0] == (byte)byteCodes.recievedInvalidData) { SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]); return null; }
             //if the first byte is the wrong return value, retry.
-            if(bytes[0] != (byte)byteCodes.verifyConnectionCallback ) { SendRaw((byte)byteCodes.recievedInvalidData); triesLeft--; return null; }
+            if(bytes[0] != (byte)byteCodes.verifyConnectionCallback ) { SendRaw((byte)byteCodes.recievedInvalidData); SendRaw([(byte)byteCodes.verifyConnection, randomId[0], randomId[1], randomId[2], randomId[3]]); triesLeft--; return null; }
 
             // if each of the byte in the id doesnt match the original id, retry.
             for(int i = 1; i < bytes.Length; i++)
@@ -437,68 +471,25 @@ namespace WireLink
 
             return true;
         }
-
-        /// <summary>
-        /// verifies the connection of the sockethelper to a server
-        /// </summary>
-        /// <param name="timeoutTime">the time in miliseconds before the function returns false if there is no response from the server</param>
-        public bool verifyServerConnection(uint timeoutTime = 1500, byte retries = 3)
+        private void verifyClientConnectionCallback(byte[] bytes, EndPoint clientId)
         {
+            Logger.WriteLine("[verifyClientConnectionCallback] test", true, 5);
+            //if(retries <= 0) { SendRaw((byte)byteCodes.terminateConnection); return false; }
 
-            Logger.WriteLine("[verifyServerConnection] verifing server connection", true, 4);
-
-            bool? isSuccess = null;
-            //sets the id of our deligate to the position it will occupy
-            int deligateId = recieveDeligates.Count;
-            //add a function the check if the connection is valid
-            recieveDeligates.Add((byte[] bytes) => { isSuccess = verifyServerConnectionCallback(bytes, ref retries); });
-            
-            if(!isRecieving)
-            {
-                if(StartRecieve() == false) { return false; }
-            }
-
-
-            Stopwatch timeout = Stopwatch.StartNew();
-            //checks whether the connection has returned, or the timeout has ran out
-            while((isSuccess == null && timeout.ElapsedMilliseconds < timeoutTime) || (isSuccess == null && timeoutTime == 0))
-            {
-                Thread.Sleep(25);
-            }
-            timeout.Stop();
-
-            recieveDeligates.RemoveAt(deligateId);
-
-            if(timeout.ElapsedMilliseconds >= timeoutTime) { Logger.WriteLine("[verifyServerConnection] could not verify server connection, connection timed out"); isConnectionValid = false; return false; }
-            if(retries <= 0) { Logger.WriteLine("[verifyServerConnection] could not verify server connection, couldnt reach or recognize the server"); isConnectionValid = false; return false; }
-
-            if(isSuccess ?? false) { Logger.WriteLine("[verifyServerConnection] connection verified", true, 4); }
-
-            isConnectionValid = isSuccess ?? false;
-            return isSuccess ?? false;
-        }
-        private bool? verifyServerConnectionCallback(byte[] bytes, ref byte retries)
-        {
-            Logger.WriteLine("[verifyServerConnectionCallback] test", true, 5);
-            if(retries <= 0) { SendRaw((byte)byteCodes.terminateConnection); return false; }
-
-            if(bytes[0] == (byte)byteCodes.recievedInvalidData) { return null; }
-
-            //if the first byte is the wrong value, retry.
-            if(bytes[0] != (byte)byteCodes.verifyConnection && bytes[0] != (byte)byteCodes.connectionVerified) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return null; }
-            Logger.WriteLine("[verifyServerConnectionCallback] recieved server verify request", true, 5);
-
-            if(bytes[0] == (byte)byteCodes.connectionVerified) { return true; }
+            if(bytes[0] == (byte)byteCodes.recievedInvalidData) { return; }
 
             //if the recieved data is the wrong size, retry.
-            if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); retries--; return null; }
+            if(bytes.Length != 5) { SendRaw((byte)byteCodes.recievedInvalidData); /*retries--;*/ return; }
 
-            Logger.WriteLine("[verifyServerConnectionCallback] server verify request is valid, responding", true, 5);
+            //if the first byte is the wrong value, retry.
+            if(bytes[0] != (byte)byteCodes.verifyConnection && bytes[0] != (byte)byteCodes.connectionVerified) { SendRaw((byte)byteCodes.recievedInvalidData); /*retries--;*/ return; }
+            
+            if(bytes[0] == (byte)byteCodes.connectionVerified) { engine.messageHandler.addKnownClient(clientId); return; }
+            Logger.WriteLine("[verifyClientConnectionCallback] recieved server verify request", true, 5);
+
+            Logger.WriteLine("[verifyClientConnectionCallback] server verify request is valid, responding", true, 5);
             //send the reccieved code back
             SendRaw([(byte)byteCodes.verifyConnectionCallback, bytes[1], bytes[2], bytes[3], bytes[4]]);
-            
-
-            return null;
         }
 
         public void sendHeartBeat()
