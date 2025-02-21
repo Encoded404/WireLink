@@ -94,7 +94,7 @@ namespace WireLink
             ImmutableFlag failedVerification = new ImmutableFlag();
             mainSocket.setDefaultRemoteHost();
 
-            failedVerification.Set(!mainSocket.verifyServerConnection());
+            failedVerification.Set(!mainSocket.verifyClientConnection());
             
             if(failedVerification) { Logger.WriteLine("couldn't verify server connection"); return false; }
 
