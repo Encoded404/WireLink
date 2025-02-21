@@ -51,14 +51,22 @@ namespace WireLink
     }
     internal class InternalNetworkingEngine
     {
-        public InternalNetworkingEngine()
+        public InternalNetworkingEngine(ServerType serverType)
         {
             mainSocket = new SocketHelper(this);
+
+            ClientSendQueue = new Queue<NetworkData>();
+            ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
+            ServerSendToManyQueue = new Queue<(Guid[] Clients, NetworkData)>();
+            ServerSendToAllButOneQueue = new Queue<(Guid Clients, NetworkData)>();
+            ServerSendToAllQueue = new Queue<NetworkData>();
+
+            instance = this;
         }
         /// <summary>
         /// the main packetHandler intance
         /// </summary>
-        public static InternalNetworkingEngine instance = new InternalNetworkingEngine();
+        public static InternalNetworkingEngine instance = new InternalNetworkingEngine(ServerType.Client);
 
         public MessageHandler messageHandler = new MessageHandler();
 
@@ -94,7 +102,7 @@ namespace WireLink
             ImmutableFlag failedVerification = new ImmutableFlag();
             mainSocket.setDefaultRemoteHost();
 
-            failedVerification.Set(!mainSocket.verifyClientConnection());
+            failedVerification.Set(!mainSocket.verifyServerConnection());
             
             if(failedVerification) { Logger.WriteLine("couldn't verify server connection"); return false; }
 
@@ -142,11 +150,11 @@ namespace WireLink
         Stopwatch heartBeatTimer = new Stopwatch();
 
         // i dont know what this abomination is, but it might just work
-        Queue<NetworkData>? ClientSendQueue;
-        Queue<(Guid Client, NetworkData)>? ServerSendQueue;
-        Queue<(Guid[] Clients, NetworkData)>? ServerSendToManyQueue;
-        Queue<NetworkData>? ServerSendToAllQueue;
-        Queue<(Guid exeption, NetworkData)>? ServerSendToAllButOneQueue;
+        Queue<NetworkData> ClientSendQueue;
+        Queue<(Guid Client, NetworkData)> ServerSendQueue;
+        Queue<(Guid[] Clients, NetworkData)> ServerSendToManyQueue;
+        Queue<NetworkData> ServerSendToAllQueue;
+        Queue<(Guid exeption, NetworkData)> ServerSendToAllButOneQueue;
 
         private void FixedUpdate(float deltaTime)
         {
@@ -319,7 +327,12 @@ namespace WireLink
 
         void sendHeartBeat()
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
+            ServerSendToAllQueue.Enqueue(new NetworkData(
+                0,
+                0,
+                [(byte)byteCodes.heartBeat]
+            ));
         }
 
         private bool isExeptionHAndlerAttached = false;

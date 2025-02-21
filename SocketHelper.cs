@@ -40,7 +40,6 @@ namespace WireLink
         Thread? recieveThread;
         bool isRecieving = false;
         Guid? myGuid = null;
-        SocketType socketType;
         
         public SocketHelper()
         {
@@ -54,7 +53,7 @@ namespace WireLink
             
             if(port == 0)
             {
-                this.port = InternalNetworkingEngine.instance.mainClientPort;
+                this.port = engine.mainClientPort;
             }
             else
             {
@@ -409,7 +408,7 @@ namespace WireLink
         }
 
         Random randomIdGenerator = new Random();
-        bool _isTryingToVerify = false;
+        //bool _isTryingToVerify = false;
         Dictionary<EndPoint, Action<byte[]>> verifyDelegates = new Dictionary<EndPoint, Action<byte[]>>();
         /// <summary>
         /// verifies the connection of the sockethelper to a client
@@ -425,7 +424,7 @@ namespace WireLink
             Logger.WriteLine("[verifyClientConnection] verifing client connection", false, 4);
             
             bool? verified = null;
-            _isTryingToVerify = true;
+            //_isTryingToVerify = true;
 
             byte[] predefinedMessage = new byte[5];
             
@@ -492,13 +491,27 @@ namespace WireLink
             retries--;
         }
 
-        public void verifyServerConnection()
+        private bool? verifyServerConnectionReturnValue = null;
+        public bool verifyServerConnection(int timeout = 1000)
         {
             Logger.WriteLine("[verifyClientConnection] verifing client connection", false, 4);
             
             Logger.WriteLine("[verifyServerConnection] sending verify request", false, 5);
             SendRaw((byte)byteCodes.verifyConnectionRequest);
             Logger.WriteLine("[verifyServerConnection] verify request sent", false, 5);
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            while(verifyServerConnectionReturnValue == null)
+            {
+                if(stopwatch.ElapsedMilliseconds > timeout)
+                {
+                    return false;
+                }
+
+                Thread.Sleep(10);
+            }
+
+            return (bool)verifyServerConnectionReturnValue;
         }
         private void verifyServerConnectionCallback(byte[] bytes, EndPoint clientId)
         {
