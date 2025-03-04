@@ -7,20 +7,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace WireLink
 {
-    internal enum byteCodes : byte
-    {
-        terminateConnection,
-        messageHeaderStart,
-        messageHeaderEnd,
-        verifyConnectionRequest,
-        verifyConnection,
-        verifyConnectionResponse,
-        connectionVerified,
-        recievedInvalidData,
-        heartBeat
-    }
-
-    internal class SocketHelper
+    internal class SocketHelper_old
     {
         private Socket? socket = null;
         InternalNetworkingEngine engine;
@@ -41,12 +28,12 @@ namespace WireLink
         bool isRecieving = false;
         Guid? myGuid = null;
         
-        public SocketHelper()
+        public SocketHelper_old()
         {
             Init(AddressFamily.InterNetwork);
             engine = InternalNetworkingEngine.instance;
         }
-        public SocketHelper(InternalNetworkingEngine engine, int port = 0)
+        public SocketHelper_old(InternalNetworkingEngine engine, int port = 0)
         {
             Init(AddressFamily.InterNetwork);
             this.engine = engine;
@@ -60,7 +47,7 @@ namespace WireLink
                 this.port = port;
             }
         }
-        public SocketHelper(Socket socket, InternalNetworkingEngine? engine = null, int port = 0)
+        public SocketHelper_old(Socket socket, InternalNetworkingEngine? engine = null, int port = 0)
         {
             this.socket = socket;
             _isTerminated = false;
@@ -83,7 +70,7 @@ namespace WireLink
                 this.port = port;
             }
         }
-        public SocketHelper(Socket socket, Guid guid, InternalNetworkingEngine? engine = null, int port = 0)
+        public SocketHelper_old(Socket socket, Guid guid, InternalNetworkingEngine? engine = null, int port = 0)
         {
             this.socket = socket;
             _isTerminated = false;

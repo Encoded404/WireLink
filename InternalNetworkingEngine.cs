@@ -53,7 +53,7 @@ namespace WireLink
     {
         public InternalNetworkingEngine(ServerType serverType)
         {
-            mainSocket = new SocketHelper(this);
+            mainSocket = new SocketHelper_old(this);
 
             ClientSendQueue = new Queue<NetworkData>();
             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
@@ -70,7 +70,7 @@ namespace WireLink
 
         public MessageHandler messageHandler = new MessageHandler();
 
-        SocketHelper mainSocket;
+        SocketHelper_old mainSocket;
         List<Thread>? clientSockethreads;
         bool run = true;
 
@@ -317,7 +317,7 @@ namespace WireLink
         private void initServerValues()
         {
             clientSockethreads = new List<Thread>();
-            mainSocket = new SocketHelper(this);
+            mainSocket = new SocketHelper_old(this);
             
             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
             ServerSendToAllQueue = new Queue<NetworkData>();
@@ -378,7 +378,7 @@ namespace WireLink
 
             initServerValues();
 
-            mainSocket = new SocketHelper(this);
+            mainSocket = new SocketHelper_old(this);
 
             InitServerLoops();
             
