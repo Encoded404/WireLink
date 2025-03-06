@@ -5,6 +5,11 @@ namespace WireLink
 {
     internal class UdpSocket
     {
+        public UdpSocket()
+        {
+            _socket = new Socket(SocketType.Dgram, ProtocolType.Udp);
+        }
+
         Socket _socket;
 
         bool isBound = false;
@@ -25,7 +30,26 @@ namespace WireLink
         {
 
         }
+        private async Task RecieveFunction()
+        {
+            ArraySegment<byte> buffer = new ArraySegment<byte>();
+            int bufferSize = await _socket.ReceiveAsync(buffer);
+        }
+        public void addReciever()
+        {
+
+        }
+
         public void AddListener(Task function)
+        {
+
+        }
+        
+        /// <summary>
+        /// connect to a remote socket
+        /// </summary>
+        /// <param name="address">the adress of the remote host</param>
+        public void connect(IPAddress address)
         {
 
         }
