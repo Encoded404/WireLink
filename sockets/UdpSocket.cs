@@ -30,10 +30,21 @@ namespace WireLink
         {
 
         }
+        public delegate void DataReceivedEventHandler(ReadOnlyMemory<byte> data);
+        public event DataReceivedEventHandler? RecieveCallback;
         private async Task RecieveFunction()
         {
-            ArraySegment<byte> buffer = new ArraySegment<byte>();
-            int bufferSize = await _socket.ReceiveAsync(buffer);
+            byte[] buffer = new byte[1024];
+            int recievedBytes = await _socket.ReceiveAsync(buffer);
+
+            ReadOnlyMemory<byte> trimmedBuffer = new ReadOnlyMemory<byte>(buffer, 0, recievedBytes);
+            
+            Action<ReadOnlyMemory<byte>>[]? callbacks = RecieveCallback?.GetInvocationList().OfType<Action<ReadOnlyMemory<byte>>>().ToArray();
+
+            if (callbacks != null)
+            {
+                callbacks.Select(callback => Task.Run(() => callback(trimmedBuffer)));
+            }
         }
         public void addReciever()
         {
