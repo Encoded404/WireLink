@@ -6,52 +6,9 @@ using MessagePack;
 
 namespace WireLink
 {
-    internal enum ServerType
+    internal class InternalNetworkingEngine_old
     {
-        Client,
-        Server,
-        RelayServer,
-    }
-    [MessagePackObject(AllowPrivate = true)]
-    internal struct NetworkData
-    {
-        [Key(0)]
-        public long messageId;
-        [Key(1)]
-        public int dataType;
-        [Key(2)]
-        public byte[] message;
-
-        public NetworkData(long messageId, int dataType, byte[] message)
-        {
-            this.messageId = messageId;
-            this.dataType = dataType;
-            this.message = message;
-        }
-    }
-    internal class ImmutableFlag
-    {
-        private bool _value = false;
-
-        public bool Value => _value;
-        
-        public void Set()
-        {
-            Set(true);
-        }
-        public void Set(bool value)
-        {
-            _value = value ? true : _value;
-        }
-
-        public static implicit operator bool(ImmutableFlag flag)
-        {
-            return flag._value;
-        }
-    }
-    internal class InternalNetworkingEngine
-    {
-        public InternalNetworkingEngine(ServerType serverType)
+        public InternalNetworkingEngine_old(ServerType serverType)
         {
             mainSocket = new SocketHelper_old(this);
 
@@ -66,7 +23,7 @@ namespace WireLink
         /// <summary>
         /// the main packetHandler intance
         /// </summary>
-        public static InternalNetworkingEngine instance = new InternalNetworkingEngine(ServerType.Client);
+        public static InternalNetworkingEngine_old instance = new InternalNetworkingEngine_old(ServerType.Client);
 
         public MessageHandler messageHandler = new MessageHandler();
 

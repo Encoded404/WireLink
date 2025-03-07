@@ -1,17 +1,19 @@
 using System.Text;
 using ConsoleLogger;
 using System.IO.Hashing;
+using SimpleTypeSerilizer;
+using System.Collections;
 
 namespace WireLink
 {
     internal class DataConversionHelper
     {
-        private static Dictionary <string, int> lookupTable = new Dictionary <string, int>();
+        private static Dictionary <string, int> HashLookupTable = new Dictionary <string, int>();
         public static int computeHash(string input)
         {
-            if(lookupTable.ContainsKey(input))
+            if(HashLookupTable.ContainsKey(input))
             {
-                return lookupTable[input];
+                return HashLookupTable[input];
             }
 
             // Convert string to byte array
@@ -20,7 +22,7 @@ namespace WireLink
             // Compute xxHash32
             int returnValue = BitConverter.ToInt32(XxHash32.Hash(byteArray));
             
-            lookupTable.Add(input, returnValue);
+            HashLookupTable.Add(input, returnValue);
 
             return returnValue;
         }
@@ -28,6 +30,29 @@ namespace WireLink
         public static int computeHash(Type input)
         {
             return computeHash(input.Name);
+        }
+
+        public static byte[][] SerializeData(object data)
+        {
+            object serializedData = TypeSerilizer.GetValues(data);
+
+            return getBytes(serializedData);
+        }
+        private static byte[][] getBytes(object data)
+        {
+            List<List<byte>> result = new List<List<byte>>();
+            Type type = data.GetType();
+            if(typeof(IEnumerable).IsAssignableFrom(type) && type != typeof(string))
+            {
+                foreach(object obj in (IEnumerable)data)
+                {
+                    result.Add(getBytes(obj));
+                }
+            }
+            else
+            {
+                
+            }
         }
     }
 }

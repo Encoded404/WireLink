@@ -10,7 +10,7 @@ namespace WireLink
     internal class SocketHelper_old
     {
         private Socket? socket = null;
-        InternalNetworkingEngine engine;
+        InternalNetworkingEngine_old engine;
         bool _isTerminated = true;
         bool _isConnected = false;
         //bool isConnectionValid = false;
@@ -31,9 +31,9 @@ namespace WireLink
         public SocketHelper_old()
         {
             Init(AddressFamily.InterNetwork);
-            engine = InternalNetworkingEngine.instance;
+            engine = InternalNetworkingEngine_old.instance;
         }
-        public SocketHelper_old(InternalNetworkingEngine engine, int port = 0)
+        public SocketHelper_old(InternalNetworkingEngine_old engine, int port = 0)
         {
             Init(AddressFamily.InterNetwork);
             this.engine = engine;
@@ -47,14 +47,14 @@ namespace WireLink
                 this.port = port;
             }
         }
-        public SocketHelper_old(Socket socket, InternalNetworkingEngine? engine = null, int port = 0)
+        public SocketHelper_old(Socket socket, InternalNetworkingEngine_old? engine = null, int port = 0)
         {
             this.socket = socket;
             _isTerminated = false;
 
             if(engine == null)
             {
-                this.engine = InternalNetworkingEngine.instance;
+                this.engine = InternalNetworkingEngine_old.instance;
             }
             else
             {
@@ -63,14 +63,14 @@ namespace WireLink
             
             if(port == 0)
             {
-                this.port = InternalNetworkingEngine.instance.mainClientPort;
+                this.port = InternalNetworkingEngine_old.instance.mainClientPort;
             }
             else
             {
                 this.port = port;
             }
         }
-        public SocketHelper_old(Socket socket, Guid guid, InternalNetworkingEngine? engine = null, int port = 0)
+        public SocketHelper_old(Socket socket, Guid guid, InternalNetworkingEngine_old? engine = null, int port = 0)
         {
             this.socket = socket;
             _isTerminated = false;
@@ -78,7 +78,7 @@ namespace WireLink
 
             if(engine == null)
             {
-                this.engine = InternalNetworkingEngine.instance;
+                this.engine = InternalNetworkingEngine_old.instance;
             }
             else
             {
@@ -87,7 +87,7 @@ namespace WireLink
 
             if(port == 0)
             {
-                this.port = InternalNetworkingEngine.instance.mainClientPort;
+                this.port = InternalNetworkingEngine_old.instance.mainClientPort;
             }
             else
             {

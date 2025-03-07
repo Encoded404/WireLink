@@ -1,4 +1,5 @@
 using System.Net;
+using System.Threading.Tasks;
 using ConsoleLogger;
 using MessagePack;
 
@@ -19,7 +20,7 @@ namespace WireLink
         public int serverPort = defaultServerPort;
         public int clientPort = defaultClientPort;
 
-        InternalNetworkingEngine packetHandler = new InternalNetworkingEngine();
+        ClientPacketConnector packetHandler = new ClientPacketConnector();
 
         IPEndPoint serverEndpoint = new IPEndPoint(IPAddress.Loopback, 0);
 
@@ -77,36 +78,36 @@ namespace WireLink
         /// </summary>
         /// <param name="host">the ip address or domain name of the server</param>
         /// <param name=Encoding"port">the port on the erver you are trying to connect to, set to -1 to use default server port</param>
-        public void ConnectToServer(string host, int port = -1)
+        public async Task ConnectToServer(string host, int port = -1)
         {
             if (port == -1)
             {
                 port = defaultServerPort;
             }
 
-            serverEndpoint = TryParseEndpoint(host, port) ?? InternalNetworkingEngine.emptyIPEndPoint;
+            serverEndpoint = TryParseEndpoint(host, port) ?? InternalNetworkingEngine_old.emptyIPEndPoint;
 
             serverPort = port;
 
-            packetHandler.StartClient(serverEndpoint);
+            await packetHandler.ConnectToServer(serverEndpoint);
 
             Logger.WriteLine("connectToServer returned");
         }
         /// <summary>
         /// disconnects from the server
         /// </summary>
-        public void DisconnectFromServer()
+        public async Task DisconnectFromServer()
         {
-            packetHandler.Stop();
+            await packetHandler.Disconnect();
         }
 
-        public bool Send<T>(int id, T data)
+        public async Task<bool> Send<T>(int MessageID, T data)
         {
             try
             {
-                byte[] bytes = MessagePackSerializer.Serialize(data);
+                byte[] bytes = DataConversionHelper.SerializeData(data);
                 int dataType = DataConversionHelper.computeHash(typeof(T));
-                packetHandler.sendMessage(new NetworkData(id, dataType, bytes));
+                await packetHandler.SendPacket(new NetworkData(MessageID, dataType, bytes));
             }
             catch
             {

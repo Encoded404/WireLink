@@ -18,7 +18,7 @@ namespace WireLink
         public int serverPort = defaultServerPort;
         public int clientPort = defaultClientPort;
 
-        InternalNetworkingEngine packetHandler = new InternalNetworkingEngine();
+        InternalNetworkingEngine_old packetHandler = new InternalNetworkingEngine();
 
         IPEndPoint serverEndpoint = new IPEndPoint(IPAddress.Loopback, 0);
 

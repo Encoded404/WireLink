@@ -3,13 +3,18 @@ namespace WireLink
     internal enum byteCodes : byte
     {
         terminateConnection,
-        messageHeaderStart,
-        messageHeaderEnd,
+        simpleMessageHeader,
         verifyConnectionRequest,
         verifyConnection,
         verifyConnectionResponse,
         connectionVerified,
         recievedInvalidData,
         heartBeat
+    }
+        internal enum ServerType
+    {
+        Client,
+        Server,
+        RelayServer,
     }
 }
