@@ -11,7 +11,7 @@ namespace SimpleTypeSerilizer
         /// <summary>
         /// Recursively retrieves serializable members from an object.
         /// </summary>
-        public static object GetValues(object obj)
+        public static List<object?> GetValues(object obj)
         {
             if (obj == null)
                 throw new NullReferenceException("cannot serialize a value of type 'null'");
@@ -20,10 +20,10 @@ namespace SimpleTypeSerilizer
 
             // If the type is a "simple" type, eg int, long, short, byte, return its value directly.
             // Console.WriteLine("type is: {0}", type);
-            if (IsSimple(type))
+            if (ReturnableTypes(type))
             {
                 // Console.WriteLine("returning: {0}", obj);
-                return obj;
+                return new List<object?> { obj };
             }
 
             // If the object is a collection, eg list, array, hashset, etc, process each element one by one.
@@ -69,7 +69,7 @@ namespace SimpleTypeSerilizer
         /// <summary>
         /// Determines if a type is "simple" (i.e. a primitive type, enum, or a common immutable type).
         /// </summary>
-        private static bool IsSimple(Type type)
+        private static bool ReturnableTypes(Type type)
         {
             return type.IsPrimitive
                 || type.IsEnum

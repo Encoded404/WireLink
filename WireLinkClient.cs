@@ -105,9 +105,9 @@ namespace WireLink
         {
             try
             {
-                byte[] bytes = DataConversionHelper.SerializeData(data);
+                TypedByte[] bytes = DataConversionHelper.SerializeData(data);
                 int dataType = DataConversionHelper.computeHash(typeof(T));
-                await packetHandler.SendPacket(new NetworkData(MessageID, dataType, bytes));
+                await packetHandler.SendPacket(new NetworkData(MessageID, bytes));
             }
             catch
             {

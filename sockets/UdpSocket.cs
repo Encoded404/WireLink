@@ -7,7 +7,7 @@ namespace WireLink
 {
     internal class UdpSocket
     {
-        public UdpSocket(PacketHelper packetHelper)
+        public UdpSocket(PacketHandler packetHelper)
         {
             _socket = new Socket(SocketType.Dgram, ProtocolType.Udp);
             mainCancellationToken = mainCancellationTokenSource.Token;
@@ -24,7 +24,7 @@ namespace WireLink
         }
 
         Socket _socket;
-        PacketHelper packetHelper;
+        PacketHandler packetHelper;
 
         CancellationTokenSource mainCancellationTokenSource = new CancellationTokenSource();
         CancellationToken mainCancellationToken;

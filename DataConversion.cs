@@ -32,27 +32,44 @@ namespace WireLink
             return computeHash(input.Name);
         }
 
-        public static byte[][] SerializeData(object data)
+        public static TypedByte[] SerializeData(object data)
         {
             object serializedData = TypeSerilizer.GetValues(data);
 
-            return getBytes(serializedData);
-        }
-        private static byte[][] getBytes(object data)
-        {
-            List<List<byte>> result = new List<List<byte>>();
-            Type type = data.GetType();
-            if(typeof(IEnumerable).IsAssignableFrom(type) && type != typeof(string))
+            List<object?> DataList = TypeSerilizer.GetValues(serializedData);
+
+            List<TypedByte> byteList = new List<TypedByte>(); 
+            foreach(object? obj in DataList)
             {
-                foreach(object obj in (IEnumerable)data)
+                if(obj != null)
                 {
-                    result.Add(getBytes(obj));
+                    byteList.Add(ConvertSimpleToBytes(obj));
                 }
             }
-            else
+            return byteList.ToArray();
+        }
+        public static TypedByte ConvertSimpleToBytes(object value)
+        {
+            switch (value)
             {
-                
+                case bool b: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(b));
+                case char c: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(c));
+                case short s: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(s));
+                case ushort us: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(us));
+                case int i: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(i));
+                case uint ui: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(ui));
+                case long l: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(l));
+                case ulong ul: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(ul));
+                case float f: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(f));
+                case double d: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(d));
+                case Enum e: return new TypedByte(computeHash(value.GetType()), BitConverter.GetBytes(Convert.ToInt64(e))); // Enums are stored as their underlying type
+                case string str: return new TypedByte(computeHash(value.GetType()), System.Text.Encoding.UTF8.GetBytes(str)); // Strings require encoding
+                default: throw new ArgumentException("Unsupported type");
             }
         }
+        // private static List<byte[]> getBytes(object data)
+        // {
+            
+        // }
     }
 }
