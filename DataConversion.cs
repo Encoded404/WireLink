@@ -8,28 +8,41 @@ namespace WireLink
 {
     internal class DataConversionHelper
     {
-        private static Dictionary <string, int> HashLookupTable = new Dictionary <string, int>();
-        public static int computeHash(string input)
+        private static Dictionary <string, int> StringHashLookupTable = new Dictionary <string, int>();
+        private static Dictionary <Type, int> TypeHashLookupTable = new Dictionary <string, int>();
+        private static int ComputexxHash(string input)
         {
-            if(HashLookupTable.ContainsKey(input))
-            {
-                return HashLookupTable[input];
-            }
-
             // Convert string to byte array
             byte[] byteArray = Encoding.UTF8.GetBytes(input);
             
             // Compute xxHash32
-            int returnValue = BitConverter.ToInt32(XxHash32.Hash(byteArray));
-            
+            return BitConverter.ToInt32(XxHash32.Hash(byteArray));
+        }
+        public static int computeHash(Type input)
+        {
+            if(StringHashLookupTable.ContainsKey(input))
+            {
+                return StringHashLookupTable[input];
+            }
+
+            int returnValue = ComputexxHash(input.FullName);
+
             HashLookupTable.Add(input, returnValue);
 
             return returnValue;
         }
-
-        public static int computeHash(Type input)
+        public static int computeHash(string input)
         {
-            return computeHash(input.Name);
+            if(StringHashLookupTable.ContainsKey(input))
+            {
+                return StringHashLookupTable[input];
+            }
+
+            int returnValue = ComputexxHash(input);
+
+            HashLookupTable.Add(input, returnValue);
+
+            return returnValue;
         }
 
         public static TypedByteArray[] SerializeData(object data)

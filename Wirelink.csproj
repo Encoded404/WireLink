@@ -2,13 +2,14 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\LoggerLib\LoggerLib.csproj" />
+    <ProjectReference Include="..\SimpleTypeSerializer\SimpleTypeSerializer.csproj" />
   </ItemGroup>
 
   <ItemGroup>
