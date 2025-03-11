@@ -1,21 +1,26 @@
 namespace WireLink
 {
-    internal struct TypedByte
+    internal struct TypedByteArray
     {
         public int dataType;
         public byte[] message;
-        public TypedByte(int dataType, byte[] message)
+        public TypedByteArray(int dataType, byte[] message)
         {
             this.dataType = dataType;
             this.message = message;
         }
     }
+    internal struct TypeWrapper
+    {
+        public int dataType;
+        public 
+    }
     internal struct NetworkData
     {
         public int dataType;
         public long messageID;
-        public TypedByte[] message;
-        public NetworkData(long messageID, TypedByte[] message)
+        public TypedByteArray[] message;
+        public NetworkData(long messageID, TypedByteArray[] message)
         {
             this.messageID = messageID;
             this.message = message;
