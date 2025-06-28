@@ -1,525 +1,525 @@
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
-using ConsoleLogger;
-using MessagePack;
+// using System.Diagnostics;
+// using System.Net;
+// using System.Net.Sockets;
+// using ConsoleLogging;
+// using MessagePack;
 
-namespace WireLink
-{
-    internal class InternalNetworkingEngine_old
-    {
-        public InternalNetworkingEngine_old(ServerType serverType)
-        {
-            mainSocket = new SocketHelper_old(this);
+// namespace WireLink
+// {
+//     internal class InternalNetworkingEngine_old
+//     {
+//         public InternalNetworkingEngine_old(ServerType serverType)
+//         {
+//             mainSocket = new SocketHelper_old(this);
 
-            ClientSendQueue = new Queue<NetworkData>();
-            ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
-            ServerSendToManyQueue = new Queue<(Guid[] Clients, NetworkData)>();
-            ServerSendToAllButOneQueue = new Queue<(Guid Clients, NetworkData)>();
-            ServerSendToAllQueue = new Queue<NetworkData>();
+//             ClientSendQueue = new Queue<NetworkData>();
+//             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
+//             ServerSendToManyQueue = new Queue<(Guid[] Clients, NetworkData)>();
+//             ServerSendToAllButOneQueue = new Queue<(Guid Clients, NetworkData)>();
+//             ServerSendToAllQueue = new Queue<NetworkData>();
 
-            instance = this;
-        }
-        /// <summary>
-        /// the main packetHandler intance
-        /// </summary>
-        public static InternalNetworkingEngine_old instance = new InternalNetworkingEngine_old(ServerType.Client);
+//             instance = this;
+//         }
+//         /// <summary>
+//         /// the main packetHandler intance
+//         /// </summary>
+//         public static InternalNetworkingEngine_old instance = new InternalNetworkingEngine_old(ServerType.Client);
 
-        public MessageHandler messageHandler = new MessageHandler();
+//         public MessageHandler messageHandler = new MessageHandler();
 
-        SocketHelper_old mainSocket;
-        List<Thread>? clientSockethreads;
-        bool run = true;
+//         SocketHelper_old mainSocket;
+//         List<Thread>? clientSockethreads;
+//         bool run = true;
 
-        /// <summary>
-        /// the main port for the server, ie the port the server listens for clients on
-        /// </summary>
-        public int mainServerPort = 45707;
-        public int mainClientPort = 45706;
+//         /// <summary>
+//         /// the main port for the server, ie the port the server listens for clients on
+//         /// </summary>
+//         public int mainServerPort = 45707;
+//         public int mainClientPort = 45706;
 
-        /// <summary>
-        /// the target updates per second of the main loop, which is responsible for packets, dataCompression, connections, etc
-        /// </summary>
-        public int targetUpdatesPerSecond = 2;
+//         /// <summary>
+//         /// the target updates per second of the main loop, which is responsible for packets, dataCompression, connections, etc
+//         /// </summary>
+//         public int targetUpdatesPerSecond = 2;
 
-        Thread? acceptConectionThread;
+//         Thread? acceptConectionThread;
 
-        // all private methods
-        private void InitServerLoops()
-        {
+//         // all private methods
+//         private void InitServerLoops()
+//         {
 
-        }
-        private void InitClientLoops()
-        {
+//         }
+//         private void InitClientLoops()
+//         {
 
-        }
+//         }
 
-        private bool ConnectToServer()
-        {
-            ImmutableFlag failedVerification = new ImmutableFlag();
-            mainSocket.setDefaultRemoteHost();
+//         private bool ConnectToServer()
+//         {
+//             ImmutableFlag failedVerification = new ImmutableFlag();
+//             mainSocket.setDefaultRemoteHost();
 
-            failedVerification.Set(!mainSocket.verifyServerConnection());
+//             failedVerification.Set(!mainSocket.verifyServerConnection());
             
-            if(failedVerification) { Logger.WriteLine("couldn't verify server connection"); return false; }
+//             if(failedVerification) { Logging.WriteLine("couldn't verify server connection"); return false; }
 
-            return true;
-        }
+//             return true;
+//         }
 
-        /* /// <summary>
-        /// a deligate being called on server shutdown
-        /// </summary>
-        public List<Action> handleLoopExitsCallBack = new List<Action>(); */
-        private void HandleLoopExits()
-        {
-            if(_serverType == ServerType.Server)
-            {
-                shouldAcceptConnectionThreadRun = false;
-                if(acceptConectionThread != null) { acceptConectionThread.Join(); Logger.WriteLine("acceptConectionThread succesfully shut down"); }
-            }
+//         /* /// <summary>
+//         /// a deligate being called on server shutdown
+//         /// </summary>
+//         public List<Action> handleLoopExitsCallBack = new List<Action>(); */
+//         private void HandleLoopExits()
+//         {
+//             if(_serverType == ServerType.Server)
+//             {
+//                 shouldAcceptConnectionThreadRun = false;
+//                 if(acceptConectionThread != null) { acceptConectionThread.Join(); Logging.WriteLine("acceptConectionThread succesfully shut down"); }
+//             }
 
-            /* foreach(Action action in handleLoopExitsCallBack)
-            {
-                action.Invoke();
-            } */
+//             /* foreach(Action action in handleLoopExitsCallBack)
+//             {
+//                 action.Invoke();
+//             } */
 
-            return;
-        }
+//             return;
+//         }
 
-        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-        //  fffff   i   x   x   eeeee   dddd        u   u   pppp    dddd      a     ttttt   eeeee
-        //  f            x x    e       d   d       u   u   p   p   d   d   a   a     t     e
-        //  fff     i     x     eee     d   d       u   u   pppp    d   d   aaaaa     t     eee
-        //  f       i    x x    e       d   d       u   u   p       d   d   a   a     t     e
-        //  f       i   x   x   eeeee   dddd        uuuuu   p       dddd    a   a     t     eeeee
-        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//         //  fffff   i   x   x   eeeee   dddd        u   u   pppp    dddd      a     ttttt   eeeee
+//         //  f            x x    e       d   d       u   u   p   p   d   d   a   a     t     e
+//         //  fff     i     x     eee     d   d       u   u   pppp    d   d   aaaaa     t     eee
+//         //  f       i    x x    e       d   d       u   u   p       d   d   a   a     t     e
+//         //  f       i   x   x   eeeee   dddd        uuuuu   p       dddd    a   a     t     eeeee
+//         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-        private void startFixedUpdate()
-        {
-            heartBeatTimer.Start();
-        }
-        /// <summary>
-        /// a deligate being called targetUpdatesPerSecond times every second
-        /// </summary>
-        public List<Action> FixedUpdateCallBack = new List<Action>();
-        int incementer = 0;
-        Stopwatch heartBeatTimer = new Stopwatch();
+//         private void startFixedUpdate()
+//         {
+//             heartBeatTimer.Start();
+//         }
+//         /// <summary>
+//         /// a deligate being called targetUpdatesPerSecond times every second
+//         /// </summary>
+//         public List<Action> FixedUpdateCallBack = new List<Action>();
+//         int incementer = 0;
+//         Stopwatch heartBeatTimer = new Stopwatch();
 
-        // i dont know what this abomination is, but it might just work
-        Queue<NetworkData> ClientSendQueue;
-        Queue<(Guid Client, NetworkData)> ServerSendQueue;
-        Queue<(Guid[] Clients, NetworkData)> ServerSendToManyQueue;
-        Queue<NetworkData> ServerSendToAllQueue;
-        Queue<(Guid exeption, NetworkData)> ServerSendToAllButOneQueue;
+//         // i dont know what this abomination is, but it might just work
+//         Queue<NetworkData> ClientSendQueue;
+//         Queue<(Guid Client, NetworkData)> ServerSendQueue;
+//         Queue<(Guid[] Clients, NetworkData)> ServerSendToManyQueue;
+//         Queue<NetworkData> ServerSendToAllQueue;
+//         Queue<(Guid exeption, NetworkData)> ServerSendToAllButOneQueue;
 
-        private void FixedUpdate(float deltaTime)
-        {
-            // incementer++;
-            // if(incementer > 10)
-            // {
-            //     incementer = 0;
-            //     //Logger.WriteLine("test", true);
-            // }
+//         private void FixedUpdate(float deltaTime)
+//         {
+//             // incementer++;
+//             // if(incementer > 10)
+//             // {
+//             //     incementer = 0;
+//             //     //Logging.WriteLine("test", true);
+//             // }
 
-            if(heartBeatTimer.ElapsedMilliseconds > 500 && (_serverType == ServerType.Server || _serverType == ServerType.RelayServer))
-            {
-                heartBeatTimer.Restart();
-                sendHeartBeat();
-            }
-        }
-        private void StartMainLoop()
-        {
-            MainLoopThread = new Thread(MainLoop);
-            MainLoopThread.Start();
-        }
-        readonly long ticksPerSecond = Stopwatch.Frequency;
-        readonly long ticksPerMilisecond = Stopwatch.Frequency / 1000;
-        private Thread? MainLoopThread;
-        private void MainLoop()
-        {
-            bool isReadyForShutdown = false;
+//             if(heartBeatTimer.ElapsedMilliseconds > 500 && (_serverType == ServerType.Server || _serverType == ServerType.RelayServer))
+//             {
+//                 heartBeatTimer.Restart();
+//                 sendHeartBeat();
+//             }
+//         }
+//         private void StartMainLoop()
+//         {
+//             MainLoopThread = new Thread(MainLoop);
+//             MainLoopThread.Start();
+//         }
+//         readonly long ticksPerSecond = Stopwatch.Frequency;
+//         readonly long ticksPerMilisecond = Stopwatch.Frequency / 1000;
+//         private Thread? MainLoopThread;
+//         private void MainLoop()
+//         {
+//             bool isReadyForShutdown = false;
 
-            Stopwatch stopwatch = new Stopwatch();
-            float milisecondsPerUpdate = 1000f / targetUpdatesPerSecond;
+//             Stopwatch stopwatch = new Stopwatch();
+//             float milisecondsPerUpdate = 1000f / targetUpdatesPerSecond;
 
-            //float exessTime = 0f;
+//             //float exessTime = 0f;
 
-            Queue<float> avrDeltaTimeQueue = new();
-            float maxQueueSaveDuration = 8f;
-            float maxQueueSaveCount = (float)targetUpdatesPerSecond * maxQueueSaveDuration;
+//             Queue<float> avrDeltaTimeQueue = new();
+//             float maxQueueSaveDuration = 8f;
+//             float maxQueueSaveCount = (float)targetUpdatesPerSecond * maxQueueSaveDuration;
 
-            float avrDeltaTime = 0f;
-            float maxDeltaTime = 0f;
-            float minDeltaTime = 1f;
+//             float avrDeltaTime = 0f;
+//             float maxDeltaTime = 0f;
+//             float minDeltaTime = 1f;
 
-            startFixedUpdate();
+//             startFixedUpdate();
 
-            Logger.WriteLine($"running main loop at a Frequency of {targetUpdatesPerSecond} updates per second, timer has a reselution of {ticksPerSecond} ticks per seconds");
-            stopwatch.Start();
-            long currentTimeStartThisIteration = stopwatch.ElapsedTicks - (long)(1f / targetUpdatesPerSecond * ticksPerSecond); // the last part is added to trick deltaTime into thinking the correct time has passed since last update
-            long currentDeltaTime = currentTimeStartThisIteration;
-            long timeAfterLastIteration = stopwatch.ElapsedTicks;
+//             Logging.WriteLine($"running main loop at a Frequency of {targetUpdatesPerSecond} updates per second, timer has a reselution of {ticksPerSecond} ticks per seconds");
+//             stopwatch.Start();
+//             long currentTimeStartThisIteration = stopwatch.ElapsedTicks - (long)(1f / targetUpdatesPerSecond * ticksPerSecond); // the last part is added to trick deltaTime into thinking the correct time has passed since last update
+//             long currentDeltaTime = currentTimeStartThisIteration;
+//             long timeAfterLastIteration = stopwatch.ElapsedTicks;
 
-            while(run || !isReadyForShutdown)
-            {
-                currentTimeStartThisIteration = stopwatch.ElapsedTicks;
+//             while(run || !isReadyForShutdown)
+//             {
+//                 currentTimeStartThisIteration = stopwatch.ElapsedTicks;
 
-                milisecondsPerUpdate = 1000f / targetUpdatesPerSecond;
+//                 milisecondsPerUpdate = 1000f / targetUpdatesPerSecond;
 
-                if(!run)
-                {
-                    Logger.WriteLine("shutting down main loop");
-                    HandleLoopExits();
-                    isReadyForShutdown = true;
-                    continue;
-                }
+//                 if(!run)
+//                 {
+//                     Logging.WriteLine("shutting down main loop");
+//                     HandleLoopExits();
+//                     isReadyForShutdown = true;
+//                     continue;
+//                 }
 
-                //get deltatime in seconds since last update
-                float deltaTime = (stopwatch.ElapsedTicks - currentDeltaTime) / (float)ticksPerSecond;
-                currentDeltaTime = stopwatch.ElapsedTicks;
-                //logger.WriteLine($"elapsedTicks: {stopwatch.ElapsedTicks}, currentTime: {currentTime}, ticksPerSecond: {ticksPerSecond} result: {deltaTime}");
-                FixedUpdate(deltaTime);
+//                 //get deltatime in seconds since last update
+//                 float deltaTime = (stopwatch.ElapsedTicks - currentDeltaTime) / (float)ticksPerSecond;
+//                 currentDeltaTime = stopwatch.ElapsedTicks;
+//                 //Logging.WriteLine($"elapsedTicks: {stopwatch.ElapsedTicks}, currentTime: {currentTime}, ticksPerSecond: {ticksPerSecond} result: {deltaTime}");
+//                 FixedUpdate(deltaTime);
                 
-                foreach(Action action in FixedUpdateCallBack)
-                {
-                    action.Invoke();
-                }
+//                 foreach(Action action in FixedUpdateCallBack)
+//                 {
+//                     action.Invoke();
+//                 }
 
-                // get deltatime statistics
-                avrDeltaTimeQueue.Enqueue(deltaTime);
+//                 // get deltatime statistics
+//                 avrDeltaTimeQueue.Enqueue(deltaTime);
                 
-                float avrBuffer = 0f;
-                int avrCount = 0;
+//                 float avrBuffer = 0f;
+//                 int avrCount = 0;
 
-                //if the buffer is bigger than the max amount of values permited, remove 1 till its within the allowed limit 
-                if(avrDeltaTimeQueue.Count > maxQueueSaveCount)
-                {
-                    for(int i = avrDeltaTimeQueue.Count; i > maxQueueSaveCount; i--)
-                    {
-                        avrDeltaTimeQueue.Dequeue();
-                    }
-                }
+//                 //if the buffer is bigger than the max amount of values permited, remove 1 till its within the allowed limit 
+//                 if(avrDeltaTimeQueue.Count > maxQueueSaveCount)
+//                 {
+//                     for(int i = avrDeltaTimeQueue.Count; i > maxQueueSaveCount; i--)
+//                     {
+//                         avrDeltaTimeQueue.Dequeue();
+//                     }
+//                 }
 
-                //count up each itteration
-                foreach(float value in avrDeltaTimeQueue)
-                {
-                    avrCount++;
-                    avrBuffer += value;
-                }
+//                 //count up each itteration
+//                 foreach(float value in avrDeltaTimeQueue)
+//                 {
+//                     avrCount++;
+//                     avrBuffer += value;
+//                 }
 
-                // (the rest of mainloop) calculate and wait for the remaining time to forfill targetUpdatesPerSecond
+//                 // (the rest of mainloop) calculate and wait for the remaining time to forfill targetUpdatesPerSecond
 
-                //compute the avarage
-                avrDeltaTime = avrBuffer / avrCount;
+//                 //compute the avarage
+//                 avrDeltaTime = avrBuffer / avrCount;
 
-                //check if current deltatime is bigger or smaller than the current max and min deltatime
-                if(deltaTime > maxDeltaTime) { maxDeltaTime = deltaTime; }
-                if(deltaTime < minDeltaTime) { minDeltaTime = deltaTime; }
-                //Logger.WriteLine($"deltaTime is {deltaTime}, avr deltaTime in the last {avrDeltaTimeQueue.Count / (float)targetUpdatesPerSecond} seconds is: {avrDeltaTime}, with a target deltaTime of {1f/targetUpdatesPerSecond}, max deltaTime is: {maxDeltaTime} and min deltaTime is: {minDeltaTime}");
+//                 //check if current deltatime is bigger or smaller than the current max and min deltatime
+//                 if(deltaTime > maxDeltaTime) { maxDeltaTime = deltaTime; }
+//                 if(deltaTime < minDeltaTime) { minDeltaTime = deltaTime; }
+//                 //Logging.WriteLine($"deltaTime is {deltaTime}, avr deltaTime in the last {avrDeltaTimeQueue.Count / (float)targetUpdatesPerSecond} seconds is: {avrDeltaTime}, with a target deltaTime of {1f/targetUpdatesPerSecond}, max deltaTime is: {maxDeltaTime} and min deltaTime is: {minDeltaTime}");
 
 
-                long currenTime = stopwatch.ElapsedTicks;
+//                 long currenTime = stopwatch.ElapsedTicks;
 
-                //get the ticks elapsed this iteration
-                long elapsedTicksSinceLastIteration = currenTime - timeAfterLastIteration;
-                //how many miliseconds there are leftover this iteration, goes to negative if it takes more than milisecondsPerUpdate
-                float milisecondsRemaining = milisecondsPerUpdate - (elapsedTicksSinceLastIteration / (float)ticksPerMilisecond);
+//                 //get the ticks elapsed this iteration
+//                 long elapsedTicksSinceLastIteration = currenTime - timeAfterLastIteration;
+//                 //how many miliseconds there are leftover this iteration, goes to negative if it takes more than milisecondsPerUpdate
+//                 float milisecondsRemaining = milisecondsPerUpdate - (elapsedTicksSinceLastIteration / (float)ticksPerMilisecond);
 
-                // keeps track of the time it needs to get back on track
-                //exessTime = Math.Min(0, exessTime + extraMilisecondsThisIteration);
+//                 // keeps track of the time it needs to get back on track
+//                 //exessTime = Math.Min(0, exessTime + extraMilisecondsThisIteration);
 
-                //float elapsedSeconds = elapsedTicksSinceLastIteration / (float)ticksPerSecond;
+//                 //float elapsedSeconds = elapsedTicksSinceLastIteration / (float)ticksPerSecond;
 
-                //float milisecondsRemaining = Math.Max(0, milisecondsPerUpdate - (elapsedSeconds * 1000));
+//                 //float milisecondsRemaining = Math.Max(0, milisecondsPerUpdate - (elapsedSeconds * 1000));
                 
-                int sleepTime = (int)Math.Round(milisecondsRemaining);
+//                 int sleepTime = (int)Math.Round(milisecondsRemaining);
 
-                long sleepTimer = stopwatch.ElapsedTicks;
+//                 long sleepTimer = stopwatch.ElapsedTicks;
 
-                //Logger.WriteLine($"milisecondsRemaining is: {milisecondsRemaining} and sleepTime is: {sleepTime - 1}");
+//                 //Logging.WriteLine($"milisecondsRemaining is: {milisecondsRemaining} and sleepTime is: {sleepTime - 1}");
 
-                if(sleepTime > 1)
-                {
-                    //sleeps for the extra time this iteration, minus a bit to give the operating system time to regive control to the program
-                    Thread.Sleep(sleepTime - 1);
-                }
+//                 if(sleepTime > 1)
+//                 {
+//                     //sleeps for the extra time this iteration, minus a bit to give the operating system time to regive control to the program
+//                     Thread.Sleep(sleepTime - 1);
+//                 }
 
-                // waits for the remaing time caused by low sleep precision
-                while((stopwatch.ElapsedTicks - sleepTimer) / ticksPerMilisecond < milisecondsRemaining) { }
+//                 // waits for the remaing time caused by low sleep precision
+//                 while((stopwatch.ElapsedTicks - sleepTimer) / ticksPerMilisecond < milisecondsRemaining) { }
                 
-                timeAfterLastIteration = stopwatch.ElapsedTicks;
-            }
+//                 timeAfterLastIteration = stopwatch.ElapsedTicks;
+//             }
             
-            Logger.WriteLine("exiting main loop");
-        }
-        private bool isConnectionValid(Socket socket)
-        {
-            return true;
-        }
-        bool shouldAcceptConnectionThreadRun = true;
-        private void TerminateClients()
-        {
-            throw new NotImplementedException();
-        }
+//             Logging.WriteLine("exiting main loop");
+//         }
+//         private bool isConnectionValid(Socket socket)
+//         {
+//             return true;
+//         }
+//         bool shouldAcceptConnectionThreadRun = true;
+//         private void TerminateClients()
+//         {
+//             throw new NotImplementedException();
+//         }
 
-        private void TerminateSingleClient(Guid clientGuid)
-        {
-            throw new NotImplementedException();
-        }
-        private void TerminateSingleConnection(Guid clientGuid)
-        {
-            throw new NotImplementedException();
-        }
-        private void initServerValues()
-        {
-            clientSockethreads = new List<Thread>();
-            mainSocket = new SocketHelper_old(this);
+//         private void TerminateSingleClient(Guid clientGuid)
+//         {
+//             throw new NotImplementedException();
+//         }
+//         private void TerminateSingleConnection(Guid clientGuid)
+//         {
+//             throw new NotImplementedException();
+//         }
+//         private void initServerValues()
+//         {
+//             clientSockethreads = new List<Thread>();
+//             mainSocket = new SocketHelper_old(this);
             
-            ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
-            ServerSendToAllQueue = new Queue<NetworkData>();
-            ServerSendToAllButOneQueue = new Queue<(Guid exeption, NetworkData)>();
-            ServerSendToManyQueue = new Queue<(Guid[] Clients, NetworkData)>();
-        }
+//             ServerSendQueue = new Queue<(Guid Client, NetworkData)>();
+//             ServerSendToAllQueue = new Queue<NetworkData>();
+//             ServerSendToAllButOneQueue = new Queue<(Guid exeption, NetworkData)>();
+//             ServerSendToManyQueue = new Queue<(Guid[] Clients, NetworkData)>();
+//         }
 
-        void sendHeartBeat()
-        {
-            //throw new NotImplementedException();
-            ServerSendToAllQueue.Enqueue(new NetworkData(
-                0,
-                0,
-                [(byte)byteCodes.heartBeat]
-            ));
-        }
+//         void sendHeartBeat()
+//         {
+//             //throw new NotImplementedException();
+//             ServerSendToAllQueue.Enqueue(new NetworkData(
+//                 0,
+//                 0,
+//                 [(byte)byteCodes.heartBeat]
+//             ));
+//         }
 
-        private bool isExeptionHAndlerAttached = false;
+//         private bool isExeptionHAndlerAttached = false;
 
-        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-        // PPPP   U   U  BBBBB   L      III  CCCC       M   M  EEEEE  TTTTTTT  H   H  OOO   DDDD   SSSS
-        // p   p  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
-        // P   P  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
-        // PPPP   U   U  BBBBB   L       I   C          M M M  EEEE      T     HHHH  O   O  D   D  SSS_serverType == null || 
-        // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
-        // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
-        // P       UUU   BBBBB   LLLLL  III  CCCC       M   M  EEEEE     T     H   H  OOO   DDDD  SSSS
-        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-        // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//         // PPPP   U   U  BBBBB   L      III  CCCC       M   M  EEEEE  TTTTTTT  H   H  OOO   DDDD   SSSS
+//         // p   p  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
+//         // P   P  U   U  B    B  L       I   C          MM MM  E         T     H   H O   O  D   D S
+//         // PPPP   U   U  BBBBB   L       I   C          M M M  EEEE      T     HHHH  O   O  D   D  SSS_serverType == null || 
+//         // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
+//         // P      U   U  B    B  L       I   C          M   M  E         T     H   H O   O  D   D     S
+//         // P       UUU   BBBBB   LLLLL  III  CCCC       M   M  EEEEE     T     H   H  OOO   DDDD  SSSS
+//         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+//         // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 
-        /// <summary>
-        /// the time in ms between each heartbeat
-        /// </summary>
-        public float heartBeatInterval = 500;
+//         /// <summary>
+//         /// the time in ms between each heartbeat
+//         /// </summary>
+//         public float heartBeatInterval = 500;
 
-        private ServerType? _serverType = null;
-        internal ServerType? CurrentServerType
-        {
-            get { return _serverType; }
-        }
-        /// <summary>
-        /// the adress if the server. doesnt do anything of ServerType is Server.
-        /// </summary>
-        public IPEndPoint? serverAdress = null;
+//         private ServerType? _serverType = null;
+//         internal ServerType? CurrentServerType
+//         {
+//             get { return _serverType; }
+//         }
+//         /// <summary>
+//         /// the adress if the server. doesnt do anything of ServerType is Server.
+//         /// </summary>
+//         public IPEndPoint? serverAdress = null;
 
-        public int StartServer()
-        {
-            _serverType = ServerType.Server;
+//         public int StartServer()
+//         {
+//             _serverType = ServerType.Server;
 
-            if(!isExeptionHAndlerAttached)
-            {
-                Logger.WriteLine("attaching exeptionhandler", true);
-                AppDomain currentDomain = AppDomain.CurrentDomain;
-                currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
-                isExeptionHAndlerAttached = true;
-            }
+//             if(!isExeptionHAndlerAttached)
+//             {
+//                 Logging.WriteLine("attaching exeptionhandler", true);
+//                 AppDomain currentDomain = AppDomain.CurrentDomain;
+//                 currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+//                 isExeptionHAndlerAttached = true;
+//             }
 
-            initServerValues();
+//             initServerValues();
 
-            mainSocket = new SocketHelper_old(this);
+//             mainSocket = new SocketHelper_old(this);
 
-            InitServerLoops();
+//             InitServerLoops();
             
-            Thread.Sleep(2);
+//             Thread.Sleep(2);
 
-            StartMainLoop();
+//             StartMainLoop();
             
-            return 0;
-        }
-        public static readonly IPEndPoint emptyIPEndPoint = new IPEndPoint(IPAddress.Any, 0);
-        /// <summary>
-        /// starts a client and connects to a server
-        /// </summary>
-        /// <param name="serverAdress">the ip and port to connect to</param>
-        /// <returns></returns>
-        public int StartClient(IPEndPoint serverAdress)
-        {
-            if(serverAdress == emptyIPEndPoint)
-            {
-                return 2;
-            }
+//             return 0;
+//         }
+//         public static readonly IPEndPoint emptyIPEndPoint = new IPEndPoint(IPAddress.Any, 0);
+//         /// <summary>
+//         /// starts a client and connects to a server
+//         /// </summary>
+//         /// <param name="serverAdress">the ip and port to connect to</param>
+//         /// <returns></returns>
+//         public int StartClient(IPEndPoint serverAdress)
+//         {
+//             if(serverAdress == emptyIPEndPoint)
+//             {
+//                 return 2;
+//             }
 
-            _serverType = ServerType.Client;
+//             _serverType = ServerType.Client;
 
-            if(!isExeptionHAndlerAttached)
-            {
-                Logger.WriteLine("attaching exeptionhandler", true);
-                AppDomain currentDomain = AppDomain.CurrentDomain;
-                currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
-                isExeptionHAndlerAttached = true;
-            }
+//             if(!isExeptionHAndlerAttached)
+//             {
+//                 Logging.WriteLine("attaching exeptionhandler", true);
+//                 AppDomain currentDomain = AppDomain.CurrentDomain;
+//                 currentDomain.UnhandledException += new UnhandledExceptionEventHandler(CleanUp);
+//                 isExeptionHAndlerAttached = true;
+//             }
 
-            ClientSendQueue = new Queue<NetworkData>();
+//             ClientSendQueue = new Queue<NetworkData>();
 
-            InitClientLoops();
+//             InitClientLoops();
             
-            Thread.Sleep(2);
+//             Thread.Sleep(2);
 
-            mainSocket.Init(serverAdress);
+//             mainSocket.Init(serverAdress);
 
-            bool isConnected = ConnectToServer();
+//             bool isConnected = ConnectToServer();
 
-            if(!isConnected) { return 13; }
+//             if(!isConnected) { return 13; }
 
-            StartMainLoop();
+//             StartMainLoop();
             
-            return 0;
-        }
-        public void Stop()
-        {
-            run = false;
+//             return 0;
+//         }
+//         public void Stop()
+//         {
+//             run = false;
 
-            // it is being done in handleLoopExits but is included here for completenes
-            shouldAcceptConnectionThreadRun = false;
+//             // it is being done in handleLoopExits but is included here for completenes
+//             shouldAcceptConnectionThreadRun = false;
 
-            Logger.WriteLine("terminating clients", true, 3);
-            Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logger.WriteLine("TerminateClients completed", true); });
-            terminateClients.Wait();
+//             Logging.WriteLine("terminating clients", true, 3);
+//             Task terminateClients = Task.Factory.StartNew(() => { TerminateClients(); Logging.WriteLine("TerminateClients completed", true); });
+//             terminateClients.Wait();
 
-            Logger.WriteLine("closing local socket", true);
-            mainSocket.Terminate();
+//             Logging.WriteLine("closing local socket", true);
+//             mainSocket.Terminate();
 
-            Logger.WriteLine("Stop Function returning", true, 4);
-            return;
-        }
-        public void Restart()
-        {
-            //stop the current instance
-            Stop();
+//             Logging.WriteLine("Stop Function returning", true, 4);
+//             return;
+//         }
+//         public void Restart()
+//         {
+//             //stop the current instance
+//             Stop();
 
-            //reinit all values
-            run = true;
-            //handleLoopExitsCallBack = new List<Action>();
-            FixedUpdateCallBack = new List<Action>();
-            incementer = 0;
+//             //reinit all values
+//             run = true;
+//             //handleLoopExitsCallBack = new List<Action>();
+//             FixedUpdateCallBack = new List<Action>();
+//             incementer = 0;
 
-            if(_serverType == ServerType.Server)
-            {
-                shouldAcceptConnectionThreadRun = true;
-                //start the server
-                StartServer();
-            }
-            if(_serverType == ServerType.Client)
-            {
-                StartClient(serverAdress ?? emptyIPEndPoint);
-            }
-        }
-        /// <summary>
-        /// send a message to the server
-        /// </summary>
-        /// <param name="messageId">a id that can be used to identify the recieving code</param>
-        /// <param name="dataType">a hash of the c# type that is sent</param>
-        /// <param name="message">the byte message to send</param>
-        public void sendMessage(NetworkData data)
-        {
-            if(_serverType != ServerType.Client) { throw new InvalidOperationException($"you cannot call sendMessage when ServerType is {_serverType}"); }
-            else if(ClientSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessage without initializing the server"); }
+//             if(_serverType == ServerType.Server)
+//             {
+//                 shouldAcceptConnectionThreadRun = true;
+//                 //start the server
+//                 StartServer();
+//             }
+//             if(_serverType == ServerType.Client)
+//             {
+//                 StartClient(serverAdress ?? emptyIPEndPoint);
+//             }
+//         }
+//         /// <summary>
+//         /// send a message to the server
+//         /// </summary>
+//         /// <param name="messageId">a id that can be used to identify the recieving code</param>
+//         /// <param name="dataType">a hash of the c# type that is sent</param>
+//         /// <param name="message">the byte message to send</param>
+//         public void sendMessage(NetworkData data)
+//         {
+//             if(_serverType != ServerType.Client) { throw new InvalidOperationException($"you cannot call sendMessage when ServerType is {_serverType}"); }
+//             else if(ClientSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessage without initializing the server"); }
 
-            ClientSendQueue.Enqueue(data);
-        }
-        /// <summary>
-        /// sends the message to all clients
-        /// </summary>
-        /// <param name="message">the byte message to send</param>
-        public void sendMessageToAllClients(NetworkData data)
-        {
-            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToAllClients when ServerType is {_serverType}"); }
-            else if(ServerSendToAllQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllClients without initializing the server"); }
+//             ClientSendQueue.Enqueue(data);
+//         }
+//         /// <summary>
+//         /// sends the message to all clients
+//         /// </summary>
+//         /// <param name="message">the byte message to send</param>
+//         public void sendMessageToAllClients(NetworkData data)
+//         {
+//             if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToAllClients when ServerType is {_serverType}"); }
+//             else if(ServerSendToAllQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllClients without initializing the server"); }
 
-            ServerSendToAllQueue.Enqueue(data);
-        }
-        /// <summary>
-        /// sends a message to a specefic client.
-        /// </summary>
-        /// <param name="message">the byte message to send</param>
-        /// <param name="guid">the guid of the client the message should be send to</param>
-        public void sendMessageToClient(Guid clientGuid, NetworkData data)
-        {
-            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToClient when ServerType is {_serverType}"); }
-            else if(ServerSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToClient without initializing the server"); }
+//             ServerSendToAllQueue.Enqueue(data);
+//         }
+//         /// <summary>
+//         /// sends a message to a specefic client.
+//         /// </summary>
+//         /// <param name="message">the byte message to send</param>
+//         /// <param name="guid">the guid of the client the message should be send to</param>
+//         public void sendMessageToClient(Guid clientGuid, NetworkData data)
+//         {
+//             if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToClient when ServerType is {_serverType}"); }
+//             else if(ServerSendQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToClient without initializing the server"); }
 
-            ServerSendQueue.Enqueue((clientGuid, data));
-        }
+//             ServerSendQueue.Enqueue((clientGuid, data));
+//         }
 
-        /// <summary>
-        /// sends a message to an array of client.
-        /// </summary>
-        /// <param name="message">the byte message to send</param>
-        /// <param name="guids">the guids of the clients to send the messages to</param>
-        public void sendMessageToMultipleClients(Guid[] clientGuids, NetworkData data)
-        {
-            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToMultipleClients when ServerType is {_serverType}"); }
-            else if(ServerSendToManyQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients without initializing the server"); }
+//         /// <summary>
+//         /// sends a message to an array of client.
+//         /// </summary>
+//         /// <param name="message">the byte message to send</param>
+//         /// <param name="guids">the guids of the clients to send the messages to</param>
+//         public void sendMessageToMultipleClients(Guid[] clientGuids, NetworkData data)
+//         {
+//             if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToMultipleClients when ServerType is {_serverType}"); }
+//             else if(ServerSendToManyQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToMultipleClients without initializing the server"); }
         
-            ServerSendToManyQueue.Enqueue((clientGuids, data));
-        }
+//             ServerSendToManyQueue.Enqueue((clientGuids, data));
+//         }
 
-        /// <summary>
-        /// sends a message to all but one client.
-        /// </summary>
-        /// <param name="message">the byte message to send</param>
-        /// <param name="guid">the guid of the client the message shouldt be send to</param>
-        public void sendMessageToAllButOne(Guid clientGuid, NetworkData data)
-        {
-            if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToAllButOne when ServerType is {_serverType}"); }
-            else if(ServerSendToAllButOneQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne without initializing the server"); }
+//         /// <summary>
+//         /// sends a message to all but one client.
+//         /// </summary>
+//         /// <param name="message">the byte message to send</param>
+//         /// <param name="guid">the guid of the client the message shouldt be send to</param>
+//         public void sendMessageToAllButOne(Guid clientGuid, NetworkData data)
+//         {
+//             if(_serverType != ServerType.Server || _serverType != ServerType.RelayServer) { throw new InvalidOperationException($"you cannot call sendMessageToAllButOne when ServerType is {_serverType}"); }
+//             else if(ServerSendToAllButOneQueue == null) { throw new InvalidOperationException("you cannot call sendMessageToAllButOne without initializing the server"); }
         
-            ServerSendToAllButOneQueue.Enqueue((clientGuid, data));
-        }
+//             ServerSendToAllButOneQueue.Enqueue((clientGuid, data));
+//         }
 
-        void CleanUp(object sender, UnhandledExceptionEventArgs args)
-        {
-            //Console.Clear();
+//         void CleanUp(object sender, UnhandledExceptionEventArgs args)
+//         {
+//             //Console.Clear();
 
-            Exception e = (Exception) args.ExceptionObject;
-            Logger.WriteLine("CleanUp caught : " + e.Message);
-            Logger.WriteLine($"Runtime terminating: {args.IsTerminating}");
+//             Exception e = (Exception) args.ExceptionObject;
+//             Logging.WriteLine("CleanUp caught : " + e.Message);
+//             Logging.WriteLine($"Runtime terminating: {args.IsTerminating}");
 
-            try
-            {
-                Logger.WriteLine("attemting cleanup");
+//             try
+//             {
+//                 Logging.WriteLine("attemting cleanup");
 
-                Logger.ResetColor();
-                Console.TreatControlCAsInput = false;
+//                 Logging.ResetColor();
+//                 Console.TreatControlCAsInput = false;
 
-                Logger.WriteLine("stopping server, caused by cleanup", true, 4);
+//                 Logging.WriteLine("stopping server, caused by cleanup", true, 4);
 
-                Stop();
+//                 Stop();
                 
-                Logger.WriteLine("full cleanup succesfull");
-            }
-            catch
-            {
-                Logger.WriteLine("full cleanup failed, attempting partial cleanup");
-                try
-                {
-                    TerminateClients();
-                }
-                catch
-                {
-                    Logger.WriteLine("cleanup failed completly");
-                }
-            }
-            Console.Out.Flush();
-        }
-    }
-}
+//                 Logging.WriteLine("full cleanup succesfull");
+//             }
+//             catch
+//             {
+//                 Logging.WriteLine("full cleanup failed, attempting partial cleanup");
+//                 try
+//                 {
+//                     TerminateClients();
+//                 }
+//                 catch
+//                 {
+//                     Logging.WriteLine("cleanup failed completly");
+//                 }
+//             }
+//             Console.Out.Flush();
+//         }
+//     }
+// }

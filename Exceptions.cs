@@ -1,3 +1,5 @@
+using System;
+
 namespace WireLink
 {
     class unknownThreadException : Exception
